@@ -108,7 +108,7 @@ export default function Home() {
             <motion.div key="input" {...fadeVariants} className="w-full max-w-2xl mx-auto text-center space-y-10">
               <div className="space-y-4">
                 <span className="inline-block px-4 py-1.5 rounded-full bg-secondary text-primary font-medium text-sm tracking-wider uppercase mb-2">
-                  Academic Synthesis Engine
+                  Textboox.org
                 </span>
                 <h1 className="font-display text-5xl md:text-6xl font-bold leading-tight text-primary">
                   What subject would you like to explore?
