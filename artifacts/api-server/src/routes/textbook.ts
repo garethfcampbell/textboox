@@ -213,6 +213,17 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
   res.json({ jobId, message: "Book generation started" });
 });
 
+router.get("/textbook/job/:jobId/log", async (req: Request, res: Response) => {
+  const { jobId } = req.params;
+  const logFile = path.join(OUTPUT_DIR, jobId, "python.log");
+  if (!fs.existsSync(logFile)) {
+    res.status(404).json({ error: "Log not found" });
+    return;
+  }
+  res.setHeader("Content-Type", "text/plain");
+  res.send(fs.readFileSync(logFile, "utf-8"));
+});
+
 router.get("/textbook/job/:jobId", async (req: Request, res: Response) => {
   const { jobId } = req.params;
   const statusFile = path.join(OUTPUT_DIR, jobId, "status.json");

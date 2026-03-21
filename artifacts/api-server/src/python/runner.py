@@ -69,13 +69,17 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
         with open(status_file, 'w') as f:
             json.dump(data, f)
 
-    update_status("running", "Connecting to AI...")
+    update_status("running", "Step 1: importing google.genai...")
 
     try:
         from google import genai
+        update_status("running", "Step 2: importing genai types...")
         from google.genai import types as genai_types
 
+        update_status("running", "Step 3: reading API key...")
         api_key = os.environ.get("GOOGLE_API_KEY", "")
+
+        update_status("running", "Step 4: creating AI client...")
         client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
 
         update_status("running", "Generating chapter structure...", total_chapters=10)
