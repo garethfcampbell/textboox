@@ -7,7 +7,7 @@ interface BookCoverProps {
   author?: string;
 }
 
-export function BookCover({ title, topic, author = "AI Synthesized Edition" }: BookCoverProps) {
+export function BookCover({ title, topic, author = "Textboox AI" }: BookCoverProps) {
   return (
     <motion.div 
       initial={{ rotateY: -20, opacity: 0, x: -50 }}
