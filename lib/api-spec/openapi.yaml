@@ -205,6 +205,8 @@ components:
           type: number
         completedChapters:
           type: number
+        progressPercent:
+          type: number
         availableFormats:
           type: array
           items:

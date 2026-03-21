@@ -55,7 +55,7 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
 
     def update_status(status: str, progress: str = "", current_chapter: str = "",
                       total_chapters: int = 0, completed_chapters: int = 0,
-                      available_formats=None, error: str = ""):
+                      available_formats=None, error: str = "", progress_percent: int = 0):
         data = {
             "jobId": job_id,
             "title": title,
@@ -64,13 +64,14 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
             "currentChapter": current_chapter,
             "totalChapters": total_chapters,
             "completedChapters": completed_chapters,
+            "progressPercent": progress_percent,
             "availableFormats": available_formats or [],
             "error": error
         }
         with open(status_file, 'w') as f:
             json.dump(data, f)
 
-    update_status("running", "Textbook Creation in Progress (will take about 60 seconds)")
+    update_status("running", "Textbook Creation in Progress (will take about 60 seconds)", progress_percent=5)
 
     try:
         from google import genai
@@ -81,7 +82,7 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
 
         # ── Phase 1: generate chapter structure ──────────────────────────────────
         # Matches book_creation.py format: nested dict {chapter: {section: desc}}
-        update_status("running", "Generating chapter structure...", total_chapters=10)
+        update_status("running", "Generating chapter structure...", total_chapters=10, progress_percent=10)
 
         resp = client.models.generate_content(
             model="gemini-3-flash-preview",
@@ -145,12 +146,14 @@ Include 10 chapters, each with 4 sections. Chapter titles must be descriptive an
         previous_chapters: list = []
 
         for i, (chapter_title, sections) in enumerate(structure.items(), 1):
+            ch_pct = int(15 + (i - 1) / max(1, total) * 75)
             update_status(
                 "running",
                 f"Writing chapter {i} of {total}...",
                 current_chapter=chapter_title,
                 total_chapters=total,
                 completed_chapters=i - 1,
+                progress_percent=ch_pct,
             )
 
             prev_context = ""
@@ -236,7 +239,7 @@ Each section must end with a summary box:
 
         # ── Assemble HTML ─────────────────────────────────────────────────────
         update_status("running", "Assembling HTML book...",
-                      total_chapters=total, completed_chapters=total)
+                      total_chapters=total, completed_chapters=total, progress_percent=92)
 
         base_name = os.path.splitext(filename)[0] if "." in filename else filename
         html_path = os.path.join(output_dir, f"{base_name}.html")
@@ -299,7 +302,7 @@ Each section must end with a summary box:
 
         # ── Phase 3: EPUB export ──────────────────────────────────────────────
         update_status("running", "Building EPUB...",
-                      total_chapters=total, completed_chapters=total)
+                      total_chapters=total, completed_chapters=total, progress_percent=95)
 
         epub_path = os.path.join(output_dir, f"{base_name}.epub")
         try:
@@ -370,7 +373,7 @@ li { margin: 3px 0; }
 
         # ── Phase 4: PDF export ───────────────────────────────────────────────
         update_status("running", "Building PDF...",
-                      total_chapters=total, completed_chapters=total)
+                      total_chapters=total, completed_chapters=total, progress_percent=97)
 
         pdf_path = os.path.join(output_dir, f"{base_name}.pdf")
         try:
@@ -544,7 +547,7 @@ td {{
 
         update_status("completed", "Book generation complete!",
                       total_chapters=total, completed_chapters=total,
-                      available_formats=available)
+                      available_formats=available, progress_percent=100)
 
     except Exception as e:
         tb = traceback.format_exc()

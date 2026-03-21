@@ -52,6 +52,7 @@ export interface JobStatus {
   currentChapter?: string;
   totalChapters?: number;
   completedChapters?: number;
+  progressPercent?: number;
   availableFormats?: string[];
   error?: string;
 }

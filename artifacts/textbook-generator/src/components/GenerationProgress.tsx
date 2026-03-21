@@ -41,7 +41,9 @@ export function GenerationProgress({ status, onReset }: GenerationProgressProps)
 
   const total = status.totalChapters || 10;
   const completed = status.completedChapters || 0;
-  const percent = Math.min(100, Math.max(0, (completed / Math.max(1, total)) * 100));
+  const percent = status.progressPercent !== undefined
+    ? Math.min(100, Math.max(0, status.progressPercent))
+    : Math.min(100, Math.max(0, (completed / Math.max(1, total)) * 100));
 
   return (
     <div className="w-full max-w-xl mx-auto bg-card p-10 rounded-3xl shadow-2xl shadow-black/5 border border-border/50">
