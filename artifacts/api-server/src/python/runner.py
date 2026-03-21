@@ -72,13 +72,11 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
     update_status("running", "Loading generation engine...")
 
     try:
-        import contextlib as _ctx
-        import io as _io
-
-        # Suppress all verbose print/logging output from book_creation
-        # (it prints entire chapter content to stdout which is piped to log file anyway)
-        with _ctx.redirect_stdout(_io.StringIO()), _ctx.redirect_stderr(_io.StringIO()):
-            from book_creation import BookGenerator, EPUBConverter
+        # Import directly — do NOT redirect stdout/stderr here.
+        # C extension libraries used by book_creation (Cairo, ReportLab) write to
+        # real file descriptors and do not respect Python's sys.stderr redirect,
+        # which can cause hangs. Stdout/stderr are already piped to python.log by Node.js.
+        from book_creation import BookGenerator, EPUBConverter
 
         update_status("running", "Generating book structure...", total_chapters=10)
 

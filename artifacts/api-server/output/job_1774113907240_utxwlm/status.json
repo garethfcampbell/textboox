@@ -1,1 +1,1 @@
-{"jobId": "job_1774113907240_utxwlm", "status": "running", "progress": "Writing chapter 7 of 10...", "currentChapter": "Chapter 7: Dictionaries and Sets", "totalChapters": 10, "completedChapters": 6, "availableFormats": [], "error": ""}
+{"jobId": "job_1774113907240_utxwlm", "status": "completed", "progress": "Book generation complete!", "currentChapter": "", "totalChapters": 10, "completedChapters": 10, "availableFormats": ["html", "pdf", "epub"], "error": ""}
