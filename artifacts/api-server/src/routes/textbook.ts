@@ -11,13 +11,21 @@ const router: IRouter = Router();
 // so going up one directory lands at artifacts/api-server/ where src/python/ lives.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_SERVER_ROOT = path.resolve(__dirname, "..");
+// In production the structure is: workspace/artifacts/api-server/ so go up two levels for workspace root
+const WORKSPACE_ROOT = path.resolve(API_SERVER_ROOT, "../..");
 const PYTHON_SCRIPT = path.join(API_SERVER_ROOT, "src", "python", "runner.py");
 const OUTPUT_DIR = path.join(API_SERVER_ROOT, "output");
+// Replit installs Python packages into .pythonlibs — ensure this is always on PYTHONPATH
+// even if sitecustomize.py doesn't add it (e.g. in production containers)
+const PYTHONLIBS = path.join(WORKSPACE_ROOT, ".pythonlibs", "lib", "python3.11", "site-packages");
 
 function runPython(args: string[]): Promise<string> {
+  const existingPythonPath = process.env.PYTHONPATH ?? "";
+  const pythonPath = [PYTHONLIBS, existingPythonPath].filter(Boolean).join(":");
+
   return new Promise((resolve, reject) => {
     const proc = spawn("python3", [PYTHON_SCRIPT, ...args], {
-      env: { ...process.env },
+      env: { ...process.env, PYTHONPATH: pythonPath },
       cwd: API_SERVER_ROOT,
     });
 
@@ -32,6 +40,10 @@ function runPython(args: string[]): Promise<string> {
       stderr += data.toString();
     });
 
+    proc.on("error", (err) => {
+      reject(new Error(`Failed to spawn python3: ${err.message}`));
+    });
+
     proc.on("close", (code) => {
       if (code !== 0) {
         reject(new Error(stderr || `Process exited with code ${code}`));
@@ -41,6 +53,52 @@ function runPython(args: string[]): Promise<string> {
     });
   });
 }
+
+// Debug endpoint: check Python availability and package imports in production
+router.get("/textbook/debug", async (_req: Request, res: Response) => {
+  const existingPythonPath = process.env.PYTHONPATH ?? "";
+  const pythonPath = [PYTHONLIBS, existingPythonPath].filter(Boolean).join(":");
+
+  const checkImports = () =>
+    new Promise<string>((resolve, reject) => {
+      const proc = spawn(
+        "python3",
+        ["-c", "import sys, google.genai, ebooklib, xhtml2pdf; print(sys.version)"],
+        { env: { ...process.env, PYTHONPATH: pythonPath }, cwd: API_SERVER_ROOT },
+      );
+      let out = "";
+      let err = "";
+      proc.stdout.on("data", (d) => (out += d));
+      proc.stderr.on("data", (d) => (err += d));
+      proc.on("error", (e) => reject(e));
+      proc.on("close", (code) =>
+        code === 0 ? resolve(out.trim()) : reject(new Error(err.trim())),
+      );
+    });
+
+  try {
+    const pythonVersion = await checkImports();
+    res.json({
+      pythonVersion,
+      pythonScript: PYTHON_SCRIPT,
+      pythonScriptExists: fs.existsSync(PYTHON_SCRIPT),
+      outputDir: OUTPUT_DIR,
+      workspaceRoot: WORKSPACE_ROOT,
+      pythonlibs: PYTHONLIBS,
+      pythonlibsExists: fs.existsSync(PYTHONLIBS),
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({
+      error: message,
+      pythonScript: PYTHON_SCRIPT,
+      pythonScriptExists: fs.existsSync(PYTHON_SCRIPT),
+      workspaceRoot: WORKSPACE_ROOT,
+      pythonlibs: PYTHONLIBS,
+      pythonlibsExists: fs.existsSync(PYTHONLIBS),
+    });
+  }
+});
 
 function generateJobId(): string {
   return `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
