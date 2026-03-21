@@ -47,7 +47,8 @@ def run_generate_idea(keyword: str):
 
 
 def run_generate_book(job_id: str, topic: str, title: str, filename: str, output_dir: str):
-    import io
+    # ── PHASE 1: chapter structure only (book_creation.py fully commented out) ──
+    # Once this works in production we will add chapter content, EPUB, PDF back.
 
     os.makedirs(output_dir, exist_ok=True)
     status_file = os.path.join(output_dir, "status.json")
@@ -68,63 +69,77 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
         with open(status_file, 'w') as f:
             json.dump(data, f)
 
-    # Write initial running status immediately — before any imports that might be slow
-    update_status("running", "Loading generation engine...")
+    update_status("running", "Connecting to AI...")
 
     try:
-        # Import directly — do NOT redirect stdout/stderr here.
-        # C extension libraries used by book_creation (Cairo, ReportLab) write to
-        # real file descriptors and do not respect Python's sys.stderr redirect,
-        # which can cause hangs. Stdout/stderr are already piped to python.log by Node.js.
-        from book_creation import BookGenerator, EPUBConverter
+        from google import genai
+        from google.genai import types as genai_types
 
-        update_status("running", "Generating book structure...", total_chapters=10)
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
 
-        generator = BookGenerator(topic=topic, output_filename=filename)
-        generator.book_title = title
-        generator.save_dir = output_dir
-        generator.base_save_dir = output_dir
+        update_status("running", "Generating chapter structure...", total_chapters=10)
 
-        structure_json = generator.retry_with_backoff(
-            generator.generate_book_structure,
-            generator.client,
-            topic
+        prompt = (
+            f"Create a table of contents for an academic textbook titled '{title}' on the topic: {topic}.\n"
+            "Return ONLY a JSON object where each key is a chapter title (exactly 10 chapters) "
+            "and each value is a list of 3-5 section titles for that chapter.\n"
+            "Example format: {\"Chapter 1: Introduction\": [\"Section 1.1\", \"Section 1.2\"], ...}\n"
+            "Return only valid JSON, no markdown fences."
         )
-        generator.book_structure = json.loads(structure_json)
-        total = len(generator.book_structure)
 
-        update_status("running", "Generating chapters...", total_chapters=total, completed_chapters=0)
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(temperature=0.7)
+        )
 
-        for i, (chapter_title, sections) in enumerate(generator.book_structure.items()):
-            update_status("running", f"Writing chapter {i+1} of {total}...",
-                          current_chapter=chapter_title, total_chapters=total, completed_chapters=i)
-            try:
-                chapter_content = generator.retry_with_backoff(
-                    generator.generate_chapter,
-                    generator.client,
-                    chapter_title,
-                    sections
-                )
-                generator.book_content[chapter_title] = chapter_content
-                generator.all_previous_sections.append(chapter_content)
-            except Exception as e:
-                generator.failed_sections[chapter_title] = str(e)
+        raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
-        update_status("running", "Assembling book files...", total_chapters=total, completed_chapters=total)
+        structure = json.loads(raw)
+        chapters = list(structure.keys())
+        total = len(chapters)
 
-        html_content = generator.generate_html()
-        generator.generate_pdf(html_content)
+        update_status("running", "Building HTML outline...", total_chapters=total, completed_chapters=total)
 
-        available = []
-        base_name = os.path.splitext(filename)[0] if '.' in filename else filename
+        # Write a minimal HTML file with just the chapter structure
+        base_name = os.path.splitext(filename)[0] if "." in filename else filename
+        html_path = os.path.join(output_dir, f"{base_name}.html")
 
-        for ext in ['html', 'pdf', 'epub']:
-            file_path = os.path.join(output_dir, f"{base_name}.{ext}")
-            if os.path.exists(file_path):
-                available.append(ext)
+        rows = ""
+        for i, (ch, sections) in enumerate(structure.items(), 1):
+            sec_html = "".join(f"<li>{s}</li>" for s in sections)
+            rows += (
+                f"<details open><summary><strong>Chapter {i}: {ch}</strong></summary>"
+                f"<ul>{sec_html}</ul></details>\n"
+            )
 
-        update_status("completed", "Book generation complete!", total_chapters=total,
-                      completed_chapters=total, available_formats=available)
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>{title}</title>
+<style>
+  body {{ font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }}
+  h1 {{ border-bottom: 2px solid #333; padding-bottom: 10px; }}
+  details {{ margin: 12px 0; }}
+  summary {{ cursor: pointer; font-size: 1.05rem; padding: 6px 0; }}
+  ul {{ margin: 6px 0 6px 24px; }}
+  li {{ margin: 4px 0; color: #444; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p><em>Topic: {topic}</em></p>
+<h2>Table of Contents</h2>
+{rows}
+</body></html>"""
+
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        update_status("completed", "Chapter structure ready!", total_chapters=total,
+                      completed_chapters=total, available_formats=["html"])
 
     except Exception as e:
         tb = traceback.format_exc()
