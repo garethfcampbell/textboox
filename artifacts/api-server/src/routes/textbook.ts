@@ -276,7 +276,9 @@ router.get(
       html: "text/html",
     };
 
-    const bookTitle = status.title || matchingFile;
+    const bookTitle = status.title
+      ? status.title
+      : path.basename(matchingFile, `.${format}`);
     res.setHeader("Content-Type", contentTypes[format]);
     res.setHeader(
       "Content-Disposition",

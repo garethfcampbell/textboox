@@ -58,6 +58,7 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
                       available_formats=None, error: str = ""):
         data = {
             "jobId": job_id,
+            "title": title,
             "status": status,
             "progress": progress,
             "currentChapter": current_chapter,
