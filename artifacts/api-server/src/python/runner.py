@@ -265,6 +265,7 @@ Each section must end with a summary box:
 <style>
   body {{ font-family: Georgia, serif; max-width: 860px; margin: 40px auto; padding: 0 24px; line-height: 1.7; color: #222; }}
   h1.book-title {{ font-size: 2.2rem; border-bottom: 3px solid #333; padding-bottom: 14px; margin-bottom: 6px; }}
+  p.subtitle {{ font-size: 1.25rem; text-align: center; color: #555; margin-top: 6px; font-style: italic; }}
   h2.chapter-title {{ font-size: 1.7rem; margin-top: 60px; margin-bottom: 4px; color: #1a1a2e; border-left: 5px solid #4a90d9; padding-left: 14px; }}
   .book h2 {{ font-size: 1.3rem; margin-top: 40px; color: #34495e; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }}
   .book h3 {{ font-size: 1.05rem; margin-top: 20px; color: #333; }}
@@ -287,7 +288,7 @@ Each section must end with a summary box:
 </head>
 <body>
 <h1 class="book-title">{title}</h1>
-<p><em>{topic}</em></p>
+<p class="subtitle">{topic}</p>
 <nav>
   <h2>Table of Contents</h2>
   <ol>{toc_items}</ol>
@@ -512,13 +513,20 @@ td {{
   text-align: center;
   padding-top: 80mm;
 }}
+.subtitle {{
+  font-size: 16pt;
+  text-align: center;
+  color: #555;
+  margin-top: 4mm;
+  font-style: italic;
+}}
 </style>
 </head>
 <body>
 <div class="pdf-container">
   <div class="title-page">
     <h1>{title}</h1>
-    <p><em>{topic}</em></p>
+    <p class="subtitle">{topic}</p>
   </div>
   {pdf_toc}
   {pdf_chapter_html}
