@@ -82,9 +82,10 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
         update_status("running", "Step 4: creating AI client...")
         client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
 
+        # ── Phase 1: generate chapter structure ──────────────────────────────────
         update_status("running", "Generating chapter structure...", total_chapters=10)
 
-        prompt = (
+        structure_prompt = (
             f"Create a table of contents for an academic textbook titled '{title}' on the topic: {topic}.\n"
             "Return ONLY a JSON object where each key is a chapter title (exactly 10 chapters) "
             "and each value is a list of 3-5 section titles for that chapter.\n"
@@ -92,58 +93,130 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
             "Return only valid JSON, no markdown fences."
         )
 
-        response = client.models.generate_content(
+        resp = client.models.generate_content(
             model="gemini-3-flash-preview",
-            contents=prompt,
+            contents=structure_prompt,
             config=genai_types.GenerateContentConfig(temperature=0.7)
         )
 
-        raw = response.text.strip()
+        raw = resp.text.strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
         structure = json.loads(raw)
-        chapters = list(structure.keys())
-        total = len(chapters)
+        total = len(structure)
 
-        update_status("running", "Building HTML outline...", total_chapters=total, completed_chapters=total)
+        # ── Phase 2: generate full content for each chapter ───────────────────
+        chapter_contents: dict = {}
+        previous_summaries: list = []
 
-        # Write a minimal HTML file with just the chapter structure
+        for i, (chapter_title, sections) in enumerate(structure.items(), 1):
+            update_status(
+                "running",
+                f"Writing chapter {i} of {total}...",
+                current_chapter=chapter_title,
+                total_chapters=total,
+                completed_chapters=i - 1,
+            )
+
+            context = ""
+            if previous_summaries:
+                context = "Previously covered:\n" + "\n".join(previous_summaries[-3:]) + "\n\n"
+
+            section_list = "\n".join(f"  - {s}" for s in sections)
+            chapter_prompt = (
+                f"{context}"
+                f"Write a detailed academic textbook chapter for the book '{title}' (topic: {topic}).\n\n"
+                f"Chapter title: {chapter_title}\n"
+                f"Sections to cover:\n{section_list}\n\n"
+                "Write thorough, graduate-level prose for each section. "
+                "Use clear headings for each section. "
+                "Each section should be at least 4-6 substantial paragraphs. "
+                "Do not use markdown fences. Use plain text with section headings on their own lines."
+            )
+
+            ch_resp = client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=chapter_prompt,
+                config=genai_types.GenerateContentConfig(temperature=0.8)
+            )
+
+            content = ch_resp.text.strip()
+            chapter_contents[chapter_title] = content
+            previous_summaries.append(f"Chapter {i}: {chapter_title}")
+
+        # ── Assemble HTML ─────────────────────────────────────────────────────
+        update_status("running", "Assembling HTML book...",
+                      total_chapters=total, completed_chapters=total)
+
         base_name = os.path.splitext(filename)[0] if "." in filename else filename
         html_path = os.path.join(output_dir, f"{base_name}.html")
 
-        rows = ""
-        for i, (ch, sections) in enumerate(structure.items(), 1):
-            sec_html = "".join(f"<li>{s}</li>" for s in sections)
-            rows += (
-                f"<details open><summary><strong>Chapter {i}: {ch}</strong></summary>"
-                f"<ul>{sec_html}</ul></details>\n"
+        toc_items = ""
+        for i, ch in enumerate(structure.keys(), 1):
+            anchor = f"chapter-{i}"
+            toc_items += f'<li><a href="#{anchor}">{ch}</a></li>\n'
+
+        chapter_html = ""
+        for i, (ch, content) in enumerate(chapter_contents.items(), 1):
+            anchor = f"chapter-{i}"
+            # Convert plain-text section headings to <h3>
+            lines = content.split("\n")
+            formatted = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped and len(stripped) < 100 and not stripped.endswith(".") and stripped == stripped.strip():
+                    # Heuristic: short lines without ending punctuation are likely headings
+                    formatted.append(f"<h3>{stripped}</h3>")
+                elif stripped:
+                    formatted.append(f"<p>{stripped}</p>")
+                else:
+                    formatted.append("<br>")
+            chapter_html += (
+                f'<section id="{anchor}">\n'
+                f"<h2>Chapter {i}: {ch}</h2>\n"
+                + "\n".join(formatted)
+                + "\n</section>\n<hr>\n"
             )
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>{title}</title>
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
 <style>
-  body {{ font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }}
-  h1 {{ border-bottom: 2px solid #333; padding-bottom: 10px; }}
-  details {{ margin: 12px 0; }}
-  summary {{ cursor: pointer; font-size: 1.05rem; padding: 6px 0; }}
-  ul {{ margin: 6px 0 6px 24px; }}
-  li {{ margin: 4px 0; color: #444; }}
+  body {{ font-family: Georgia, serif; max-width: 860px; margin: 40px auto; padding: 0 24px; line-height: 1.7; color: #222; }}
+  h1 {{ font-size: 2rem; border-bottom: 3px solid #333; padding-bottom: 12px; }}
+  h2 {{ font-size: 1.5rem; margin-top: 48px; color: #1a1a2e; border-left: 4px solid #4a90d9; padding-left: 12px; }}
+  h3 {{ font-size: 1.15rem; margin-top: 28px; color: #333; }}
+  p {{ margin: 0.8em 0; text-align: justify; }}
+  nav {{ background: #f5f5f5; border: 1px solid #ddd; padding: 16px 24px; margin: 24px 0; border-radius: 6px; }}
+  nav h2 {{ font-size: 1.1rem; margin: 0 0 8px 0; border: none; padding: 0; }}
+  nav ol {{ margin: 0; padding-left: 20px; }}
+  nav li {{ margin: 4px 0; }}
+  nav a {{ color: #4a90d9; text-decoration: none; }}
+  nav a:hover {{ text-decoration: underline; }}
+  hr {{ border: none; border-top: 1px solid #ddd; margin: 40px 0; }}
+  section {{ margin-bottom: 48px; }}
 </style>
 </head>
 <body>
 <h1>{title}</h1>
-<p><em>Topic: {topic}</em></p>
-<h2>Table of Contents</h2>
-{rows}
-</body></html>"""
+<p><em>{topic}</em></p>
+<nav>
+  <h2>Table of Contents</h2>
+  <ol>{toc_items}</ol>
+</nav>
+{chapter_html}
+</body>
+</html>"""
 
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html)
 
-        update_status("completed", "Chapter structure ready!", total_chapters=total,
-                      completed_chapters=total, available_formats=["html"])
+        update_status("completed", "Book generation complete!",
+                      total_chapters=total, completed_chapters=total,
+                      available_formats=["html"])
 
     except Exception as e:
         tb = traceback.format_exc()
