@@ -489,6 +489,8 @@ li p {{
   border: none;
   padding: 0;
   margin: 1mm 0;
+  font-style: italic;
+  text-indent: 3mm;
 }}
 blockquote {{
   margin: 5mm 10mm;
