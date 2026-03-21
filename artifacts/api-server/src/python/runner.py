@@ -83,20 +83,44 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
         client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
 
         # ── Phase 1: generate chapter structure ──────────────────────────────────
+        # Matches book_creation.py format: nested dict {chapter: {section: desc}}
         update_status("running", "Generating chapter structure...", total_chapters=10)
-
-        structure_prompt = (
-            f"Create a table of contents for an academic textbook titled '{title}' on the topic: {topic}.\n"
-            "Return ONLY a JSON object where each key is a chapter title (exactly 10 chapters) "
-            "and each value is a list of 3-5 section titles for that chapter.\n"
-            "Example format: {\"Chapter 1: Introduction\": [\"Section 1.1\", \"Section 1.2\"], ...}\n"
-            "Return only valid JSON, no markdown fences."
-        )
 
         resp = client.models.generate_content(
             model="gemini-3-flash-preview",
-            contents=structure_prompt,
-            config=genai_types.GenerateContentConfig(temperature=0.7)
+            contents=f"""
+TASK
+You are structuring an academic textbook.
+
+OUTPUT FORMAT
+Output ONLY valid JSON with no additional text. Do NOT begin with ```json or close with ```.
+
+{{
+    "Title of Chapter 1": {{
+        "Title of Section 1": "Description of what to include",
+        "Title of Section 2": "Description of what to include",
+        "Title of Section 3": "Description of what to include",
+        "Title of Section 4": "Description of what to include"
+    }},
+    "Title of Chapter 2": {{
+        "Title of Section 1": "Description of what to include",
+        "Title of Section 2": "Description of what to include",
+        "Title of Section 3": "Description of what to include",
+        "Title of Section 4": "Description of what to include"
+    }}
+}}
+
+PROMPT
+Write a comprehensive structure in JSON format for a book titled "{title}" about:
+
+{topic}
+
+Include 10 chapters, each with 4 sections. Chapter titles must be descriptive and thematic — do NOT use "Chapter 1", "Chapter 2" etc. The final chapter should be a concluding discussion about the key aspects covered in the book.
+""",
+            config=genai_types.GenerateContentConfig(
+                thinking_config=genai_types.ThinkingConfig(thinking_level="high"),
+                response_mime_type="application/json"
+            )
         )
 
         raw = resp.text.strip()
@@ -106,9 +130,22 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
         structure = json.loads(raw)
         total = len(structure)
 
+        # Build full book structure string for context (matches book_creation.py)
+        def format_structure(struct):
+            out = ""
+            for ch_title, sections in struct.items():
+                out += f"  Chapter: {ch_title}\n"
+                if isinstance(sections, dict):
+                    for sec_title, sec_desc in sections.items():
+                        out += f"    Section: {sec_title}: {sec_desc}\n"
+            return out
+
+        book_structure_text = format_structure(structure)
+
         # ── Phase 2: generate full content for each chapter ───────────────────
+        # Asks AI for raw HTML output with summary boxes — matches book_creation.py
         chapter_contents: dict = {}
-        previous_summaries: list = []
+        previous_chapters: list = []
 
         for i, (chapter_title, sections) in enumerate(structure.items(), 1):
             update_status(
@@ -119,21 +156,73 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
                 completed_chapters=i - 1,
             )
 
-            context = ""
-            if previous_summaries:
-                context = "Previously covered:\n" + "\n".join(previous_summaries[-3:]) + "\n\n"
+            prev_context = ""
+            if previous_chapters:
+                prev_context = "CONTENT OF ALL PREVIOUS CHAPTERS:\n"
+                for j, prev in enumerate(previous_chapters, 1):
+                    prev_context += f"\n=== CHAPTER {j} ===\n{prev[:800]}...\n"
 
-            section_list = "\n".join(f"  - {s}" for s in sections)
-            chapter_prompt = (
-                f"{context}"
-                f"Write a detailed academic textbook chapter for the book '{title}' (topic: {topic}).\n\n"
-                f"Chapter title: {chapter_title}\n"
-                f"Sections to cover:\n{section_list}\n\n"
-                "Write thorough, graduate-level prose for each section. "
-                "Use clear headings for each section. "
-                "Each section should be at least 4-6 substantial paragraphs. "
-                "Do not use markdown fences. Use plain text with section headings on their own lines."
-            )
+            section_lines = ""
+            if isinstance(sections, dict):
+                for sec_title, sec_desc in sections.items():
+                    section_lines += f"- {sec_title}: {sec_desc}\n"
+            else:
+                for sec in sections:
+                    section_lines += f"- {sec}\n"
+
+            chapter_prompt = f"""
+CONTEXT
+You are writing an academic textbook.
+Book title: {title}
+Overall topic: {topic}
+
+{prev_context}
+
+COMPLETE BOOK STRUCTURE:
+{book_structure_text}
+
+TO BE COMPLETED NOW:
+Chapter: {chapter_title}
+Sections to include:
+{section_lines}
+
+TASK
+Write a detailed, engaging, and comprehensive essay explanation suitable for an academic textbook for the current chapter. Maintain academic rigor while keeping the content accessible and engaging.
+
+WRITING STYLE
+The text MUST have a medium difficulty Flesch readability score.
+1. Use clear, straightforward vocabulary accessible to a general audience.
+2. Maintain a professional and informative tone while avoiding unnecessarily complex terminology.
+3. Break down complex concepts into understandable components with concrete examples.
+4. Write about 7-10 paragraphs for each section. Use moderately-sized paragraphs (4-6 sentences) that each develop a single main idea.
+5. Include practical applications and real-world examples but do NOT mention specific people or companies.
+6. Structure information logically, building from foundational concepts to more advanced applications.
+7. Maintain formal sentence structure but prefer active voice. Do NOT use contractions.
+8. When introducing specialized terms, immediately provide clear definitions.
+9. Use comparison and contrast to highlight key differences between related concepts.
+
+FORMATTING — output raw HTML only, no markdown:
+- Do NOT use <h1> (it will be added manually)
+- <h2> for each section title within the chapter
+- <h3> for the Summary subheading inside each summary box
+- <p> for paragraphs; <p class="first"> for the first paragraph of each section
+- <ul> and <li> for bullet lists
+- <div class="box"> for the summary box at the end of each section
+- No bare text outside of tags. No markdown. No code fences.
+- Do NOT quote specific statistics or percentages.
+- Do NOT use hyperbole on the first line (fascinating, crucial, transform, revolutionize).
+
+Each section must end with a summary box:
+<div class="box">
+    <h3>Summary</h3>
+    <ul>
+        <li>Concise bullet point of 8-12 words.</li>
+        <li>Concise bullet point of 8-12 words.</li>
+        <li>Concise bullet point of 8-12 words.</li>
+        <li>Concise bullet point of 8-12 words.</li>
+    </ul>
+</div>
+"""
 
             ch_resp = client.models.generate_content(
                 model="gemini-3-flash-preview",
@@ -142,8 +231,11 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
             )
 
             content = ch_resp.text.strip()
+            # Strip any accidental markdown fences
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             chapter_contents[chapter_title] = content
-            previous_summaries.append(f"Chapter {i}: {chapter_title}")
+            previous_chapters.append(content)
 
         # ── Assemble HTML ─────────────────────────────────────────────────────
         update_status("running", "Assembling HTML book...",
@@ -154,29 +246,15 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
 
         toc_items = ""
         for i, ch in enumerate(structure.keys(), 1):
-            anchor = f"chapter-{i}"
-            toc_items += f'<li><a href="#{anchor}">{ch}</a></li>\n'
+            toc_items += f'<li><a href="#chapter-{i}">{ch}</a></li>\n'
 
         chapter_html = ""
         for i, (ch, content) in enumerate(chapter_contents.items(), 1):
-            anchor = f"chapter-{i}"
-            # Convert plain-text section headings to <h3>
-            lines = content.split("\n")
-            formatted = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped and len(stripped) < 100 and not stripped.endswith(".") and stripped == stripped.strip():
-                    # Heuristic: short lines without ending punctuation are likely headings
-                    formatted.append(f"<h3>{stripped}</h3>")
-                elif stripped:
-                    formatted.append(f"<p>{stripped}</p>")
-                else:
-                    formatted.append("<br>")
             chapter_html += (
-                f'<section id="{anchor}">\n'
-                f"<h2>Chapter {i}: {ch}</h2>\n"
-                + "\n".join(formatted)
-                + "\n</section>\n<hr>\n"
+                f'<section id="chapter-{i}" class="chapter">\n'
+                f'<h2 class="chapter-title">{ch}</h2>\n'
+                f'<div class="book">{content}</div>\n'
+                f'</section>\n<hr>\n'
             )
 
         html = f"""<!DOCTYPE html>
@@ -186,22 +264,29 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
 <title>{title}</title>
 <style>
   body {{ font-family: Georgia, serif; max-width: 860px; margin: 40px auto; padding: 0 24px; line-height: 1.7; color: #222; }}
-  h1 {{ font-size: 2rem; border-bottom: 3px solid #333; padding-bottom: 12px; }}
-  h2 {{ font-size: 1.5rem; margin-top: 48px; color: #1a1a2e; border-left: 4px solid #4a90d9; padding-left: 12px; }}
-  h3 {{ font-size: 1.15rem; margin-top: 28px; color: #333; }}
-  p {{ margin: 0.8em 0; text-align: justify; }}
+  h1.book-title {{ font-size: 2.2rem; border-bottom: 3px solid #333; padding-bottom: 14px; margin-bottom: 6px; }}
+  h2.chapter-title {{ font-size: 1.7rem; margin-top: 60px; margin-bottom: 4px; color: #1a1a2e; border-left: 5px solid #4a90d9; padding-left: 14px; }}
+  .book h2 {{ font-size: 1.3rem; margin-top: 40px; color: #34495e; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }}
+  .book h3 {{ font-size: 1.05rem; margin-top: 20px; color: #333; }}
+  p {{ margin: 0.75em 0; text-align: justify; }}
+  p.first {{ margin-top: 0; }}
   nav {{ background: #f5f5f5; border: 1px solid #ddd; padding: 16px 24px; margin: 24px 0; border-radius: 6px; }}
-  nav h2 {{ font-size: 1.1rem; margin: 0 0 8px 0; border: none; padding: 0; }}
+  nav h2 {{ font-size: 1.05rem; margin: 0 0 10px 0; border: none; padding: 0; color: #333; }}
   nav ol {{ margin: 0; padding-left: 20px; }}
-  nav li {{ margin: 4px 0; }}
+  nav li {{ margin: 5px 0; }}
   nav a {{ color: #4a90d9; text-decoration: none; }}
   nav a:hover {{ text-decoration: underline; }}
-  hr {{ border: none; border-top: 1px solid #ddd; margin: 40px 0; }}
-  section {{ margin-bottom: 48px; }}
+  .box {{ background: #f8f9fa; border: 1px solid #e0e0e0; border-left: 4px solid #4a90d9; padding: 12px 16px; margin: 20px 0; border-radius: 4px; }}
+  .box h3 {{ margin: 0 0 8px 0; font-size: 1rem; color: #2c3e50; }}
+  .box ul {{ margin: 0; padding-left: 18px; }}
+  .box li {{ margin: 4px 0; text-align: left; }}
+  hr {{ border: none; border-top: 1px solid #ddd; margin: 48px 0; }}
+  ul, ol {{ padding-left: 22px; }}
+  li {{ margin: 4px 0; }}
 </style>
 </head>
 <body>
-<h1>{title}</h1>
+<h1 class="book-title">{title}</h1>
 <p><em>{topic}</em></p>
 <nav>
   <h2>Table of Contents</h2>
@@ -232,11 +317,18 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
                 file_name="style/main.css",
                 media_type="text/css",
                 content=b"""
-body { font-family: Georgia, serif; line-height: 1.7; margin: 20px; }
-h1 { font-size: 1.8em; border-bottom: 2px solid #333; padding-bottom: 8px; }
-h2 { font-size: 1.4em; margin-top: 2em; color: #1a1a2e; }
-h3 { font-size: 1.1em; margin-top: 1.4em; }
+body { font-family: Georgia, serif; line-height: 1.7; margin: 5%; }
+h1 { font-size: 1.6em; border-bottom: 2px solid #333; padding-bottom: 8px; }
+h2 { font-size: 1.3em; margin-top: 1.8em; color: #34495e; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+h3 { font-size: 1.05em; margin-top: 1.2em; color: #333; }
 p  { margin: 0.7em 0; text-align: justify; }
+p.first { margin-top: 0; }
+.box { background: #f8f9fa; border-left: 3px solid #4a90d9; padding: 10px 14px; margin: 14px 0; }
+.box h3 { margin: 0 0 6px 0; font-size: 1em; color: #2c3e50; }
+.box ul { margin: 0; padding-left: 16px; }
+.box li { margin: 3px 0; }
+ul, ol { padding-left: 20px; }
+li { margin: 3px 0; }
 """,
             )
             book.add_item(css)
@@ -245,29 +337,20 @@ p  { margin: 0.7em 0; text-align: justify; }
             toc_entries = []
 
             for i, (ch, content) in enumerate(chapter_contents.items(), 1):
-                lines = content.split("\n")
-                body_parts = []
-                for line in lines:
-                    s = line.strip()
-                    if s and len(s) < 100 and not s.endswith("."):
-                        body_parts.append(f"<h3>{s}</h3>")
-                    elif s:
-                        body_parts.append(f"<p>{s}</p>")
-
                 ch_html = (
-                    f'<?xml version="1.0" encoding="utf-8"?>'
-                    f'<!DOCTYPE html>'
-                    f'<html xmlns="http://www.w3.org/1999/xhtml">'
+                    '<?xml version="1.0" encoding="utf-8"?>'
+                    '<!DOCTYPE html>'
+                    '<html xmlns="http://www.w3.org/1999/xhtml">'
                     f'<head><title>{ch}</title>'
-                    f'<link rel="stylesheet" type="text/css" href="../style/main.css"/>'
-                    f'</head><body>'
-                    f'<h2>Chapter {i}: {ch}</h2>'
-                    + "".join(body_parts)
-                    + "</body></html>"
+                    '<link rel="stylesheet" type="text/css" href="../style/main.css"/>'
+                    '</head><body>'
+                    f'<h1>{ch}</h1>'
+                    f'<div class="book">{content}</div>'
+                    '</body></html>'
                 )
 
                 item = epub.EpubHtml(
-                    title=f"Chapter {i}: {ch}",
+                    title=ch,
                     file_name=f"chapter_{i:02d}.xhtml",
                     lang="en",
                 )
@@ -275,7 +358,7 @@ p  { margin: 0.7em 0; text-align: justify; }
                 item.add_item(css)
                 book.add_item(item)
                 spine.append(item)
-                toc_entries.append(epub.Link(f"chapter_{i:02d}.xhtml", f"Chapter {i}: {ch}", f"ch{i}"))
+                toc_entries.append(epub.Link(f"chapter_{i:02d}.xhtml", ch, f"ch{i}"))
 
             book.toc = toc_entries
             book.add_item(epub.EpubNcx())
@@ -295,30 +378,15 @@ p  { margin: 0.7em 0; text-align: justify; }
         try:
             from xhtml2pdf import pisa
 
-            # Build chapter body using h1 (triggers page-break-before) for chapters,
-            # h2 for sections — matching book_creation.py's template expectations.
+            # For PDF: chapter title uses <h1> (page-break-before: always)
+            # Section <h2> and summary <div class="box"> come directly from AI output
             pdf_chapter_html = ""
             for i, (ch, content) in enumerate(chapter_contents.items(), 1):
-                lines = content.split("\n")
-                body_parts = []
-                for line in lines:
-                    s = line.strip()
-                    if not s:
-                        continue
-                    if len(s) < 120 and not s.endswith(".") and not s.endswith(",") and not s.endswith(":"):
-                        body_parts.append(f"<h2>{s}</h2>")
-                    else:
-                        body_parts.append(f"<p>{s}</p>")
-                pdf_chapter_html += (
-                    f"<h1>Chapter {i}: {ch}</h1>\n"
-                    + "\n".join(body_parts)
-                    + "\n"
-                )
+                pdf_chapter_html += f"<h1>{ch}</h1>\n<div class=\"book\">{content}</div>\n"
 
-            # TOC for PDF
             pdf_toc = "<h1>Table of Contents</h1>\n<ul>\n"
             for i, ch in enumerate(structure.keys(), 1):
-                pdf_toc += f"<li>Chapter {i}: {ch}</li>\n"
+                pdf_toc += f"<li>{ch}</li>\n"
             pdf_toc += "</ul>\n"
 
             pdf_html = f"""<html>
@@ -371,24 +439,46 @@ h2 {{
 }}
 h3 {{
   font-family: "Times-Roman";
-  font-size: 14pt;
-  font-weight: 500;
+  font-size: 12pt;
+  font-weight: 600;
   text-align: left;
-  margin: 8mm 0 4mm;
+  margin: 4mm 0 2mm;
   page-break-after: avoid;
-  color: #34495e;
+  color: #2c3e50;
 }}
 p {{
   text-align: justify;
   text-indent: 0;
   margin: 2mm 0;
 }}
+p.first {{
+  page-break-before: avoid;
+  text-indent: 0;
+}}
 ul {{
   padding-left: 10mm;
 }}
 li {{
   text-align: justify;
-  margin: 2mm 0;
+  margin: 1mm 0;
+}}
+li p {{
+  margin: 0;
+  text-indent: 0;
+}}
+.box {{
+  background-color: #f8f9fa;
+  border: 1pt solid #e5e5e5;
+  padding: 4mm 5mm;
+  margin: 5mm 0;
+}}
+.box h3 {{
+  margin: 0 0 2mm 0;
+  font-size: 11pt;
+  color: #2c3e50;
+  border: none;
+  text-transform: none;
+  page-break-before: avoid;
 }}
 blockquote {{
   margin: 5mm 10mm;
@@ -402,7 +492,6 @@ table {{
   width: 100%;
   margin: 5mm 0;
   border-collapse: collapse;
-  border: 1pt solid #e5e5e5;
 }}
 th {{
   background-color: #f8f9fa;
