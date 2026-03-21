@@ -295,8 +295,144 @@ p  { margin: 0.7em 0; text-align: justify; }
         try:
             from xhtml2pdf import pisa
 
-            # xhtml2pdf works best with simpler CSS — strip unsupported properties
-            pdf_html = html.replace("text-align: justify;", "")
+            # Build chapter body using h1 (triggers page-break-before) for chapters,
+            # h2 for sections — matching book_creation.py's template expectations.
+            pdf_chapter_html = ""
+            for i, (ch, content) in enumerate(chapter_contents.items(), 1):
+                lines = content.split("\n")
+                body_parts = []
+                for line in lines:
+                    s = line.strip()
+                    if not s:
+                        continue
+                    if len(s) < 120 and not s.endswith(".") and not s.endswith(",") and not s.endswith(":"):
+                        body_parts.append(f"<h2>{s}</h2>")
+                    else:
+                        body_parts.append(f"<p>{s}</p>")
+                pdf_chapter_html += (
+                    f"<h1>Chapter {i}: {ch}</h1>\n"
+                    + "\n".join(body_parts)
+                    + "\n"
+                )
+
+            # TOC for PDF
+            pdf_toc = "<h1>Table of Contents</h1>\n<ul>\n"
+            for i, ch in enumerate(structure.keys(), 1):
+                pdf_toc += f"<li>Chapter {i}: {ch}</li>\n"
+            pdf_toc += "</ul>\n"
+
+            pdf_html = f"""<html>
+<head>
+<meta charset="UTF-8">
+<style>
+@page {{
+  size: a4 portrait;
+  margin: 25mm;
+}}
+body {{
+  font-family: "Times-Roman", serif;
+  font-size: 11.5pt;
+  line-height: 1.4;
+  text-align: justify;
+  color: #1a1a1a;
+}}
+h1 {{
+  font-family: "Times-Roman";
+  font-size: 24pt;
+  font-weight: 300;
+  text-align: center;
+  margin-top: 50mm;
+  margin-bottom: 10mm;
+  page-break-before: always;
+  page-break-after: avoid;
+  color: #34495e;
+  text-transform: uppercase;
+  border-bottom: 1pt solid #1a1a1a;
+  padding-bottom: 5mm;
+}}
+.title-page h1 {{
+  font-size: 36pt;
+  font-weight: bold;
+  margin-bottom: 10mm;
+  border: none;
+  text-transform: none;
+  page-break-before: avoid;
+  margin-top: 0;
+  color: #34495e;
+}}
+h2 {{
+  font-family: "Times-Roman";
+  font-size: 16pt;
+  font-weight: 500;
+  text-align: left;
+  margin: 10mm 0 0;
+  page-break-after: avoid;
+  color: #34495e;
+}}
+h3 {{
+  font-family: "Times-Roman";
+  font-size: 14pt;
+  font-weight: 500;
+  text-align: left;
+  margin: 8mm 0 4mm;
+  page-break-after: avoid;
+  color: #34495e;
+}}
+p {{
+  text-align: justify;
+  text-indent: 0;
+  margin: 2mm 0;
+}}
+ul {{
+  padding-left: 10mm;
+}}
+li {{
+  text-align: justify;
+  margin: 2mm 0;
+}}
+blockquote {{
+  margin: 5mm 10mm;
+  padding-left: 5mm;
+  border-left: 3pt solid #2c3e50;
+  font-style: italic;
+  color: #34495e;
+  line-height: 1.6;
+}}
+table {{
+  width: 100%;
+  margin: 5mm 0;
+  border-collapse: collapse;
+  border: 1pt solid #e5e5e5;
+}}
+th {{
+  background-color: #f8f9fa;
+  border-bottom: 2pt solid #2c3e50;
+  padding: 3mm;
+  font-weight: 600;
+  color: #2c3e50;
+}}
+td {{
+  padding: 3mm;
+  border: 1pt solid #e5e5e5;
+  vertical-align: top;
+}}
+.title-page {{
+  text-align: center;
+  padding-top: 80mm;
+}}
+</style>
+</head>
+<body>
+<div class="pdf-container">
+  <div class="title-page">
+    <h1>{title}</h1>
+    <p><em>{topic}</em></p>
+  </div>
+  {pdf_toc}
+  {pdf_chapter_html}
+</div>
+</body>
+</html>"""
 
             with open(pdf_path, "wb") as pdf_file:
                 result = pisa.CreatePDF(pdf_html, dest=pdf_file)
