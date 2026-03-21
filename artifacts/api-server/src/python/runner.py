@@ -478,7 +478,7 @@ li p {{
 }}
 .box li {{
   font-style: italic;
-  text-indent: 3mm;
+  text-indent: 1mm;
 }}
 blockquote {{
   margin: 5mm 10mm;
