@@ -385,10 +385,6 @@ li { margin: 3px 0; }
             for i, (ch, content) in enumerate(chapter_contents.items(), 1):
                 pdf_chapter_html += f"<h1>{ch}</h1>\n<div class=\"book\">{content}</div>\n"
 
-            pdf_toc = "<h1>Table of Contents</h1>\n<ul>\n"
-            for i, ch in enumerate(structure.keys(), 1):
-                pdf_toc += f"<li>{ch}</li>\n"
-            pdf_toc += "</ul>\n"
 
             pdf_html = f"""<html>
 <head>
@@ -528,7 +524,6 @@ td {{
     <h1>{title}</h1>
     <p class="subtitle">{topic}</p>
   </div>
-  {pdf_toc}
   {pdf_chapter_html}
 </div>
 </body>
