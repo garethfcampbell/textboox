@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Sparkles, ArrowRight, Download, CheckCircle, Loader2 } from 'lucide-react';
+import { BookOpen, Sparkles, ArrowRight, Download, CheckCircle, Loader2, X } from 'lucide-react';
 import { useTextbookIdea, useTextbookGenerator, useTextbookJob } from '@/hooks/use-textbook';
 import { BookCover } from '@/components/BookCover';
 import { GenerationProgress } from '@/components/GenerationProgress';
@@ -21,6 +21,7 @@ function HomeContent() {
   const [keyword, setKeyword] = useState('');
   const [idea, setIdea] = useState<BookIdea | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
 
   const generateIdea = useTextbookIdea();
@@ -84,11 +85,54 @@ function HomeContent() {
 
   return (
     <div className="relative min-h-screen bg-background text-foreground font-sans selection:bg-accent/30 selection:text-primary flex flex-col overflow-hidden">
+
+      {/* Sidebar backdrop */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.aside
+            key="sidebar"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed top-0 left-0 h-full w-80 bg-background border-r border-border z-50 flex flex-col shadow-2xl"
+          >
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <span className="font-display font-semibold text-lg text-primary">Textbook Library</span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-primary"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <BookLibrary />
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="absolute top-0 w-full p-6 z-50 flex justify-between items-center">
         <div 
           className="flex items-center gap-3 cursor-pointer group"
-          onClick={resetFlow}
+          onClick={() => setSidebarOpen(o => !o)}
         >
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-background shadow-lg shadow-primary/20 group-hover:bg-accent transition-colors">
             <BookOpen className="w-5 h-5" />
@@ -282,12 +326,6 @@ function HomeContent() {
 
         </AnimatePresence>
       </main>
-
-      {step === 'input' && (
-        <div className="relative z-10 px-6 pb-12">
-          <BookLibrary />
-        </div>
-      )}
 
       <footer className="relative z-10 text-center py-4">
         <p className="text-xs text-muted-foreground">
