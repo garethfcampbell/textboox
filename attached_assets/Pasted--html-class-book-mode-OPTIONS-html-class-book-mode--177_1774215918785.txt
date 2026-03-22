@@ -1,0 +1,551 @@
+
+    <html class="book-mode">
+      <!--
+      OPTIONS
+        <html class="book-mode">
+        <html class="powerpoint-mode" data-slide-type="regular">
+        <html class="powerpoint-mode" data-slide-type="summary">
+      -->
+
+            <head>
+              <meta charset="UTF-8">
+
+
+              <style>
+
+    /* Base styles */
+    html, body {{
+      margin: 0;
+      padding: 0;
+    }}
+
+    .failed-section {{
+      margin: 2em 0;
+      padding: 1.5em;
+      background-color: #fff5f5;
+      border: 2px dashed #fc8181;
+      border-radius: 8px;
+    }}
+
+    .failed-section h2 {{
+      color: #c53030;
+      margin-top: 0;
+    }}
+
+    .error-message {{
+      color: #742a2a;
+      font-family: "Liberation Sans", sans-serif;
+      font-size: 0.95em;
+      line-height: 1.5;
+      margin-top: 1em;
+    }}
+
+    .error-message p {{
+      margin: 0.5em 0;
+    }}
+
+    /* Mode-specific styles */
+    html.book-mode {{
+      & body {{
+        font-family: "Liberation Serif";
+        font-size: 11.5pt;
+        line-height: 1.4;
+        text-align: justify;
+        max-width: 21cm;
+        margin: 0 auto;
+        hyphens: auto;
+        -webkit-hyphens: auto;
+        -ms-hyphens: auto;
+        widows: 3;
+        orphans: 3;
+        counter-reset: page 1;
+        color: #1a1a1a;
+        letter-spacing: 0.01em;
+      }}
+
+      & .book {{
+        display: block;
+      }}
+
+      & .powerpoint {{
+        display: none;
+      }}
+
+      & .pdf-container {{
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+      }}
+
+      & .page {{
+        position: relative;
+        padding: 20mm 40mm;
+        height: 100%;
+        background: linear-gradient(135deg, #ffffff 0%, #f7f9fc 100%);
+        box-sizing: border-box;
+      }}
+
+      & .page-summaryslide {{
+        position: relative;
+        padding: 20mm 40mm;
+        height: 100%;
+        background: linear-gradient(135deg, #ffffff 0%, #f7f9fc 100%);
+        box-sizing: border-box;
+      }}
+
+
+
+      @page {{
+        size: 210mm 297mm;
+        margin: 38mm 32mm;
+        @top-center {{
+          content: string(title);
+          font-family: "Liberation Serif";
+          font-size: 9pt;
+          font-style: italic;
+          color: #333333;
+          padding-bottom: 0.3em;
+        }}
+        @bottom-center {{
+          content: counter(page);
+          font-family: "Liberation Serif";
+          font-size: 9pt;
+          color: #666666;
+          margin-top: 0.3em;
+          border-top: 0.5pt solid #cccccc;
+          padding-top: 0.3em;
+        }}
+      }}
+
+      & h1 {{
+        string-set: title content();
+        font-family: "Liberation Serif";
+        font-size: 24pt;
+        font-weight: 300;
+        text-align: center;
+        margin-top: 2in;
+        margin-bottom: 2em;
+        page-break-before: always;
+        page-break-after: avoid;
+        color: #1a1a1a;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-bottom: 1pt solid #1a1a1a;
+        padding-bottom: 0.5em;
+      }}
+
+      & h2 {{
+        font-family: "Liberation Serif";
+        font-size: 16pt;
+        font-weight: 500;
+        text-align: left;
+        margin: 1.5rem 0 1rem;
+        page-break-after: avoid;
+        color: #2c3e50;
+        letter-spacing: 0.03em;
+      }}
+
+      & h3 {{
+        font-family: "Liberation Serif";
+        font-size: 14pt;
+        font-weight: 500;
+        text-align: left;
+        margin: 1.2rem 0 0.8rem;
+        page-break-after: avoid;
+        color: #34495e;
+        letter-spacing: 0.02em;
+      }}
+
+      & p {{
+        text-align: justify;
+        text-indent: 1.5em;
+        margin: 0.5rem 0;
+        hyphens: auto;
+      }}
+
+      & h1 + p, & h2 + p, & h3 + p {{
+        text-indent: 0;
+      }}
+
+      & ul {{
+        margin: 0.8rem 0;
+        padding-left: 1.5rem;
+      }}
+
+      & li {{
+        margin-bottom: 0.4rem;
+        text-align: justify;
+        line-height: 1.4;
+      }}
+
+      & table {{
+        width: 100%;
+        margin: 1.5em 0;
+        border-collapse: collapse;
+        break-inside: avoid;
+        border: 1pt solid #e5e5e5;
+      }}
+
+      & th {{
+        background-color: #f8f9fa;
+        border-bottom: 2pt solid #2c3e50;
+        padding: 0.8em;
+        font-weight: 600;
+        color: #2c3e50;
+      }}
+
+      & td {{
+        padding: 0.8em;
+        border: 1pt solid #e5e5e5;
+        vertical-align: top;
+      }}
+
+      & blockquote {{
+        margin: 2em 3em;
+        padding-left: 1em;
+        border-left: 3pt solid #2c3e50;
+        font-style: italic;
+        color: #34495e;
+        line-height: 1.6;
+      }}
+
+      & .definition {{
+        background-color: #f8f9fa;
+        padding: 1em 1.5em;
+        margin: 1em 0;
+        border-radius: 2pt;
+        border: 1pt solid #e5e5e5;
+        break-inside: avoid;
+      }}
+
+      & .box {{
+        background-color: #f8f9fa;
+        padding: 1.2rem;
+        margin: 1rem 0;
+        border: 1px solid #e5e5e5;
+        border-left: 3px solid #2c3e50;
+        break-inside: avoid;
+      }}
+
+      & .box h3 {{
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }}
+
+      & .box > *:last-child {{
+        margin-bottom: 0;
+      }}
+
+      & figure {{
+        margin: 2em 0;
+        text-align: center;
+        break-inside: avoid;
+      }}
+
+      & figcaption {{
+        font-size: 10pt;
+        font-style: italic;
+        margin-top: 0.8em;
+        text-align: center;
+        color: #666666;
+      }}
+
+      & .reference, & .citation {{
+        font-size: 9.5pt;
+        color: #666666;
+        font-style: italic;
+      }}
+
+      & .footnote {{
+        font-size: 9pt;
+        line-height: 1.4;
+        margin-bottom: 0.4em;
+        color: #666666;
+        border-top: 1pt solid #e5e5e5;
+        padding-top: 0.5em;
+      }}
+
+      @media print {{
+        & a {{
+          text-decoration: none;
+          color: #1a1a1a;
+        }}
+
+        & table, & figure, & img, & .box, & .definition {{
+          page-break-inside: avoid;
+        }}
+
+        & h1, & h2, & h3 {{
+          page-break-after: avoid;
+        }}
+
+        & p {{
+          widows: 3;
+          orphans: 3;
+        }}
+      }}
+    }}
+
+
+    html.powerpoint-mode {{
+
+      &[data-slide-type="regular"] .page {{
+        display: block;
+      }}
+      &[data-slide-type="regular"] .page-summaryslide {{
+        display: none;
+      }}
+      &[data-slide-type="summary"] .page {{
+        display: none;
+      }}
+      &[data-slide-type="summary"] .page-summaryslide {{
+        display: block;
+      }}
+
+      & body {{
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        background: #e0e0e0;
+      }}
+
+      & .book {{
+        display: none;
+      }}
+
+      & .powerpoint {{
+        display: block;
+      }}
+
+      & .pdf-container {{
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+      }}
+
+      & .page {{
+        position: relative;
+        padding: 20mm 40mm;
+        height: 100%;
+        background: linear-gradient(135deg, #ffffff 0%, #f7f9fc 100%);
+        box-sizing: border-box;
+      }}
+
+      & .page-summaryslide {{
+        position: relative;
+        padding: 20mm 40mm;
+        height: 100%;
+        background: linear-gradient(135deg, #ffffff 0%, #f7f9fc 100%);
+        box-sizing: border-box;
+      }}
+
+      & h1 {{
+        font-family: Arial, sans-serif;
+        font-size: 18mm;
+        font-weight: 600;
+        color: #8b0000;
+        text-align: center;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        margin: 0;
+        display: none; /* Hide h1 elements in powerpoint-mode */
+      }}
+
+      & h2 {{
+        font-family: Arial, sans-serif;
+        font-size: 15mm;
+        font-weight: 600;
+        color: #8b0000;
+        margin: 12mm 0 15mm 0;
+      }}
+
+      & .content-container {{
+        position: relative;
+        margin: 0 auto;
+        padding: 0 10mm;
+      }}
+
+      & ul {{
+        margin: 8mm 0;
+        padding-left: 12mm;
+        width: 100%;
+      }}
+
+      & li {{
+        font-family: Arial, sans-serif;
+        font-size: 9mm;
+        margin-bottom: 10mm;
+        line-height: 1.2;
+        color: #4a5568;
+      }}
+
+      & li li {{
+        list-style-type: disc;
+        font-size: 8mm;
+        margin-left: 4mm;
+        margin-top: 0mm;
+        margin-bottom: 0mm;
+        line-height: 1.2;
+      }}
+
+      & li li:first-child {{
+        margin-top: -7mm;
+      }}
+
+
+      & .nav-container {{
+        padding: 0;
+        background-color: transparent;
+        border-radius: 0;
+        margin: 0mm 0;
+      }}
+
+      & .nav-list {{
+        list-style-type: disc;
+        margin: 0 0;
+        padding-left: 12mm;
+      }}
+
+      & .nav-item {{
+        font-family: Arial, sans-serif;
+        font-size: 8mm;
+        margin-bottom: 3mm;
+        line-height: 1.0;
+        color: #4a5568;
+        font-weight: normal;
+        display: list-item;
+      }}
+
+      & .sub-nav {{
+        list-style-type: disc;
+        padding-left: 10mm;
+          margin-top: 0mm;
+          margin-bottom: 4mm;
+      }}
+
+      & .sub-nav-item {{
+        font-family: Arial, sans-serif;
+        font-size: 7mm;
+        margin-bottom: 2mm;
+        line-height: 1.0;
+        color: #4a5568;
+        display: list-item;
+      }}
+
+      & .current-section {{
+        color: #8b0000;
+        font-weight: 600;
+      }}
+
+      & .logo {{
+        position: absolute;
+        top: 10mm;
+        right: 10mm;
+        width: 50mm;
+        height: auto;
+      }}
+
+      @media screen {{
+        & .page:not(.active) {{
+          display: none;
+        }}
+
+        & .page-summaryslide:not(.active) {{
+          display: none;
+          }}
+        }}
+
+
+      @media print {{
+        & .page {{
+          page-break-after: always;
+          padding: 10mm;
+          margin: 0mm;
+          width: 339.7mm;
+          height: 191.1mm;
+          background: #fff;
+        }}
+
+        @page {{
+          size: 339.7mm 191.1mm landscape;
+          margin: 0;
+        }}
+
+        & .pdf-container {{
+          height: auto;
+          overflow: visible;
+        }}
+
+        & body {{
+          height: auto;
+          overflow: visible;
+          margin: 0;
+          padding: 0;
+          background: #fff;
+        }}
+
+        & h2 {{
+          margin-left: 10mm;
+          margin-right: 10mm;
+        }}
+
+        & ul, & li {{
+          margin-left: 0mm;
+          margin-right: 35mm;
+        }}
+      }}
+    }}
+
+              </style>
+
+
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {{{{
+      const slideType = document.documentElement.getAttribute('data-slide-type');
+      const selector = slideType === 'summary' ? '.page-summaryslide' : '.page';
+
+      let currentPage = 0;
+      const container = document.querySelector('.pdf-container');
+      const pages = document.querySelectorAll(selector);
+      container.addEventListener('click', function() {{{{
+        if (document.documentElement.classList.contains('powerpoint-mode')) {{{{
+          pages[currentPage].classList.remove('active');
+          currentPage = (currentPage + 1) % pages.length;
+          pages[currentPage].classList.add('active');
+        }}}}
+      }}}});
+
+      if (document.documentElement.classList.contains('powerpoint-mode')) {{{{
+        pages.forEach(page => page.classList.remove('active'));
+        pages[0].classList.add('active');
+      }}}}
+
+      document.addEventListener('keydown', function(e) {{{{
+        if (!document.documentElement.classList.contains('powerpoint-mode')) return;
+
+        if (e.key === 'ArrowRight' || e.key === 'Space') {{{{
+          pages[currentPage].classList.remove('active');
+          currentPage = (currentPage + 1) % pages.length;
+          pages[currentPage].classList.add('active');
+          e.preventDefault();
+        }}}} else if (e.key === 'ArrowLeft') {{{{
+          pages[currentPage].classList.remove('active');
+          currentPage = (currentPage - 1 + pages.length) % pages.length;
+          pages[currentPage].classList.add('active');
+          e.preventDefault();
+        }}}}
+      }}}});
+    }}}});
+    </script>
+
+
+            </head>
+            <body>
+              <div class="pdf-container">
+              {content}
+              </div>
+            </body>
+          </html>

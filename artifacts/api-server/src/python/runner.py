@@ -113,7 +113,7 @@ Write a comprehensive structure in JSON format for a book titled "{title}" about
 
 {topic}
 
-Include 10 chapters, each with 4 sections. Chapter titles must be descriptive and thematic — do NOT use "Chapter 1", "Chapter 2" etc. The final chapter should be a concluding discussion about the key aspects covered in the book.
+Include 10 chapters, each with 5 sections. Chapter titles must be descriptive and thematic — do NOT use "Chapter 1", "Chapter 2" etc. The final chapter should be a concluding discussion about the key aspects covered in the book.
 """,
             config=genai_types.GenerateContentConfig(
                 thinking_config=genai_types.ThinkingConfig(thinking_level="high"),
@@ -258,32 +258,35 @@ Each section must end with a summary box:
             )
 
         html = f"""<!DOCTYPE html>
-<html lang="en">
+<html class="book-mode" lang="en">
 <head>
 <meta charset="UTF-8">
 <title>{title}</title>
 <style>
-  body {{ font-family: Georgia, serif; max-width: 860px; margin: 40px auto; padding: 0 24px; line-height: 1.7; color: #222; }}
-  h1.book-title {{ font-size: 2.2rem; border-bottom: 3px solid #333; padding-bottom: 14px; margin-bottom: 6px; }}
-  p.subtitle {{ font-size: 1.25rem; text-align: center; color: #555; margin-top: 6px; font-style: italic; }}
-  h2.chapter-title {{ font-size: 1.7rem; margin-top: 60px; margin-bottom: 4px; color: #1a1a2e; border-left: 5px solid #4a90d9; padding-left: 14px; }}
-  .book h2 {{ font-size: 1.3rem; margin-top: 40px; color: #34495e; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }}
-  .book h3 {{ font-size: 1.05rem; margin-top: 20px; color: #333; }}
-  p {{ margin: 0.75em 0; text-align: justify; }}
-  p.first {{ margin-top: 0; }}
+  body {{ font-family: "Liberation Serif", Georgia, "Times New Roman", serif; font-size: 11.5pt; line-height: 1.6; text-align: justify; max-width: 860px; margin: 40px auto; padding: 0 24px; color: #1a1a1a; letter-spacing: 0.01em; hyphens: auto; }}
+  h1.book-title {{ font-size: 2.2rem; font-weight: 300; text-align: center; border-bottom: 1pt solid #1a1a1a; padding-bottom: 0.5em; margin-bottom: 0.3em; letter-spacing: 0.05em; text-transform: uppercase; color: #1a1a1a; }}
+  p.subtitle {{ font-size: 1.1rem; text-align: center; color: #555; font-style: italic; margin-top: 0.3em; }}
+  h2.chapter-title {{ font-size: 1.7rem; font-weight: 500; margin-top: 60px; margin-bottom: 4px; color: #1a1a2e; border-left: 5px solid #2c3e50; padding-left: 14px; letter-spacing: 0.03em; }}
+  .book h2 {{ font-size: 1.3rem; font-weight: 500; margin-top: 40px; color: #2c3e50; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; letter-spacing: 0.02em; }}
+  .book h3 {{ font-size: 1.05rem; font-weight: 500; margin-top: 20px; color: #34495e; }}
+  p {{ margin: 0.5em 0; text-indent: 1.5em; hyphens: auto; }}
+  h1 + p, h2 + p, h3 + p, p.first {{ text-indent: 0; }}
   nav {{ background: #f5f5f5; border: 1px solid #ddd; padding: 16px 24px; margin: 24px 0; border-radius: 6px; }}
   nav h2 {{ font-size: 1.05rem; margin: 0 0 10px 0; border: none; padding: 0; color: #333; }}
   nav ol {{ margin: 0; padding-left: 20px; }}
   nav li {{ margin: 5px 0; }}
-  nav a {{ color: #4a90d9; text-decoration: none; }}
+  nav a {{ color: #2c3e50; text-decoration: none; }}
   nav a:hover {{ text-decoration: underline; }}
-  .box {{ background: #f8f9fa; border: 1px solid #e0e0e0; border-left: 4px solid #4a90d9; padding: 12px 16px; margin: 20px 0; border-radius: 4px; }}
-  .box h3 {{ margin: 0 0 8px 0; font-size: 1rem; color: #2c3e50; }}
-  .box ul {{ margin: 0; padding-left: 18px; }}
-  .box li {{ margin: 4px 0; text-align: left; }}
+  .box {{ background-color: #f8f9fa; padding: 1.2rem; margin: 1rem 0; border: 1px solid #e5e5e5; border-left: 3px solid #2c3e50; }}
+  .box h3 {{ margin-top: 0; margin-bottom: 0.8rem; font-size: 1rem; color: #2c3e50; }}
+  .box > *:last-child {{ margin-bottom: 0; }}
   hr {{ border: none; border-top: 1px solid #ddd; margin: 48px 0; }}
-  ul, ol {{ padding-left: 22px; }}
-  li {{ margin: 4px 0; }}
+  ul, ol {{ margin: 0.8rem 0; padding-left: 1.5rem; }}
+  li {{ margin-bottom: 0.4rem; text-align: justify; line-height: 1.4; }}
+  blockquote {{ margin: 2em 3em; padding-left: 1em; border-left: 3pt solid #2c3e50; font-style: italic; color: #34495e; line-height: 1.6; }}
+  table {{ width: 100%; margin: 1.5em 0; border-collapse: collapse; }}
+  th {{ background-color: #f8f9fa; border-bottom: 2pt solid #2c3e50; padding: 0.8em; font-weight: 600; color: #2c3e50; }}
+  td {{ padding: 0.8em; border: 1pt solid #e5e5e5; vertical-align: top; }}
 </style>
 </head>
 <body>
@@ -377,112 +380,104 @@ li { margin: 3px 0; }
 
         pdf_path = os.path.join(output_dir, f"{base_name}.pdf")
         try:
-            from xhtml2pdf import pisa
+            from weasyprint import HTML as WeasyHTML, CSS
 
-            # For PDF: chapter title uses <h1> (page-break-before: always)
-            # Section <h2> and summary <div class="box"> come directly from AI output
             pdf_chapter_html = ""
             for i, (ch, content) in enumerate(chapter_contents.items(), 1):
                 pdf_chapter_html += f"<h1>{ch}</h1>\n<div class=\"book\">{content}</div>\n"
 
-
-            pdf_html = f"""<html>
+            pdf_html = f"""<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>{title}</title>
 <style>
-@page {{
-  size: a4 portrait;
-  margin: 25mm;
-}}
 body {{
-  font-family: "Times-Roman", serif;
+  font-family: "Liberation Serif", Georgia, "Times New Roman", serif;
   font-size: 11.5pt;
   line-height: 1.4;
   text-align: justify;
   color: #1a1a1a;
+  letter-spacing: 0.01em;
 }}
 h1 {{
-  font-family: "Times-Roman";
+  string-set: chapter-title content();
+  font-family: "Liberation Serif", Georgia, serif;
   font-size: 24pt;
   font-weight: 300;
   text-align: center;
-  margin-top: 50mm;
-  margin-bottom: 10mm;
+  margin-top: 2in;
+  margin-bottom: 2em;
   page-break-before: always;
   page-break-after: avoid;
-  color: #34495e;
+  color: #1a1a1a;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   border-bottom: 1pt solid #1a1a1a;
-  padding-bottom: 5mm;
+  padding-bottom: 0.5em;
 }}
 .title-page h1 {{
   font-size: 36pt;
   font-weight: bold;
-  margin-bottom: 10mm;
-  border: none;
-  text-transform: none;
   page-break-before: avoid;
   margin-top: 0;
-  color: #34495e;
+  border: none;
+  text-transform: none;
 }}
 h2 {{
-  font-family: "Times-Roman";
+  font-family: "Liberation Serif", Georgia, serif;
   font-size: 16pt;
   font-weight: 500;
   text-align: left;
-  margin: 10mm 0 0;
-  page-break-after: avoid;
-  color: #34495e;
-}}
-h3 {{
-  font-family: "Times-Roman";
-  font-size: 12pt;
-  font-weight: 600;
-  text-align: left;
-  margin: 4mm 0 2mm;
+  margin: 1.5rem 0 1rem;
   page-break-after: avoid;
   color: #2c3e50;
+  letter-spacing: 0.03em;
+}}
+h3 {{
+  font-family: "Liberation Serif", Georgia, serif;
+  font-size: 14pt;
+  font-weight: 500;
+  text-align: left;
+  margin: 1.2rem 0 0.8rem;
+  page-break-after: avoid;
+  color: #34495e;
+  letter-spacing: 0.02em;
 }}
 p {{
   text-align: justify;
-  text-indent: 0;
-  margin: 2mm 0;
+  text-indent: 1.5em;
+  margin: 0.5rem 0;
 }}
-p.first {{
-  page-break-before: avoid;
+h1 + p, h2 + p, h3 + p, p.first {{
   text-indent: 0;
 }}
 ul {{
-  padding-left: 10mm;
+  margin: 0.8rem 0;
+  padding-left: 1.5rem;
 }}
 li {{
+  margin-bottom: 0.4rem;
   text-align: justify;
-  margin: 1mm 0;
-}}
-li p {{
-  margin: 0;
-  text-indent: 0;
+  line-height: 1.4;
 }}
 .box {{
-  padding: 0;
-  margin: 0;
+  background-color: #f8f9fa;
+  padding: 1.2rem;
+  margin: 1rem 0;
+  border: 1pt solid #e5e5e5;
+  border-left: 3pt solid #2c3e50;
+  break-inside: avoid;
 }}
 .box h3 {{
   margin-top: 0;
-  margin-bottom: 0;
+  margin-bottom: 0.8rem;
   font-size: 12pt;
   color: #2c3e50;
-  border: none;
-  text-transform: none;
-  page-break-before: avoid;
-}}
-.box li {{
-  font-style: italic;
-  text-indent: 1mm;
 }}
 blockquote {{
-  margin: 5mm 10mm;
-  padding-left: 5mm;
+  margin: 2em 3em;
+  padding-left: 1em;
   border-left: 3pt solid #2c3e50;
   font-style: italic;
   color: #34495e;
@@ -490,18 +485,19 @@ blockquote {{
 }}
 table {{
   width: 100%;
-  margin: 5mm 0;
+  margin: 1.5em 0;
   border-collapse: collapse;
+  break-inside: avoid;
 }}
 th {{
   background-color: #f8f9fa;
   border-bottom: 2pt solid #2c3e50;
-  padding: 3mm;
+  padding: 0.8em;
   font-weight: 600;
   color: #2c3e50;
 }}
 td {{
-  padding: 3mm;
+  padding: 0.8em;
   border: 1pt solid #e5e5e5;
   vertical-align: top;
 }}
@@ -519,22 +515,41 @@ td {{
 </style>
 </head>
 <body>
-<div class="pdf-container">
-  <div class="title-page">
-    <h1>{title}</h1>
-    <p class="subtitle">{topic}</p>
-  </div>
-  {pdf_chapter_html}
+<div class="title-page">
+  <h1>{title}</h1>
+  <p class="subtitle">{topic}</p>
 </div>
+{pdf_chapter_html}
 </body>
 </html>"""
 
-            with open(pdf_path, "wb") as pdf_file:
-                result = pisa.CreatePDF(pdf_html, dest=pdf_file)
+            page_css = CSS(string="""
+@page {
+  size: 210mm 297mm;
+  margin: 38mm 32mm;
+}
+@page:not(:first) {
+  @top-center {
+    content: string(chapter-title, first);
+    font-family: "Liberation Serif", Georgia, serif;
+    font-size: 9pt;
+    font-style: italic;
+    color: #333333;
+    padding-bottom: 0.3em;
+  }
+  @bottom-center {
+    content: counter(page);
+    font-family: "Liberation Serif", Georgia, serif;
+    font-size: 9pt;
+    color: #666666;
+    margin-top: 0.3em;
+    border-top: 0.5pt solid #cccccc;
+    padding-top: 0.3em;
+  }
+}
+""")
 
-            if result.err:
-                print(f"PDF conversion errors: {result.err}")
-                pdf_path = None
+            WeasyHTML(string=pdf_html).write_pdf(pdf_path, stylesheets=[page_css])
         except Exception as pdf_err:
             print(f"PDF generation failed (non-fatal): {pdf_err}")
             pdf_path = None
