@@ -3,20 +3,16 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { db, booksTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-// Use import.meta.url so the path works in both dev (src/routes/) and production
-// (dist/index.mjs). In production the bundle lives at artifacts/api-server/dist/index.mjs,
-// so going up one directory lands at artifacts/api-server/ where src/python/ lives.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_SERVER_ROOT = path.resolve(__dirname, "..");
-// In production the structure is: workspace/artifacts/api-server/ so go up two levels for workspace root
 const WORKSPACE_ROOT = path.resolve(API_SERVER_ROOT, "../..");
 const PYTHON_SCRIPT = path.join(API_SERVER_ROOT, "src", "python", "runner.py");
 const OUTPUT_DIR = path.join(API_SERVER_ROOT, "output");
-// Replit installs Python packages into .pythonlibs — ensure this is always on PYTHONPATH
-// even if sitecustomize.py doesn't add it (e.g. in production containers)
 const PYTHONLIBS = path.join(WORKSPACE_ROOT, ".pythonlibs", "lib", "python3.11", "site-packages");
 
 function runPython(args: string[]): Promise<string> {
@@ -54,7 +50,37 @@ function runPython(args: string[]): Promise<string> {
   });
 }
 
-// Debug endpoint: check Python availability and package imports in production
+// Save a completed job's files to the database (runs once per job)
+async function saveJobToDb(jobId: string, statusFile: string, jobDir: string): Promise<void> {
+  const status = JSON.parse(fs.readFileSync(statusFile, "utf-8"));
+  const title = status.title ?? jobId;
+  const topic = status.topic ?? "";
+
+  const files = fs.readdirSync(jobDir);
+  const findFile = (ext: string) => files.find((f) => f.endsWith(`.${ext}`));
+
+  const htmlFile = findFile("html");
+  const pdfFile  = findFile("pdf");
+  const epubFile = findFile("epub");
+
+  const htmlData  = htmlFile  ? fs.readFileSync(path.join(jobDir, htmlFile),  "utf-8")           : null;
+  const pdfData   = pdfFile   ? fs.readFileSync(path.join(jobDir, pdfFile)).toString("base64")   : null;
+  const epubData  = epubFile  ? fs.readFileSync(path.join(jobDir, epubFile)).toString("base64")  : null;
+
+  const [inserted] = await db
+    .insert(booksTable)
+    .values({ jobId, title, topic, htmlData, pdfData, epubData })
+    .onConflictDoNothing()
+    .returning({ id: booksTable.id });
+
+  if (inserted) {
+    status.dbId = inserted.id;
+    fs.writeFileSync(statusFile, JSON.stringify(status));
+  }
+}
+
+// ── Debug ─────────────────────────────────────────────────────────────────────
+
 router.get("/textbook/debug", async (_req: Request, res: Response) => {
   const existingPythonPath = process.env.PYTHONPATH ?? "";
   const pythonPath = [PYTHONLIBS, existingPythonPath].filter(Boolean).join(":");
@@ -104,6 +130,8 @@ function generateJobId(): string {
   return `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// ── Generate idea ─────────────────────────────────────────────────────────────
+
 router.post("/textbook/generate-idea", async (req: Request, res: Response) => {
   const { keyword } = req.body;
 
@@ -129,6 +157,8 @@ router.post("/textbook/generate-idea", async (req: Request, res: Response) => {
   }
 });
 
+// ── Generate book ─────────────────────────────────────────────────────────────
+
 router.post("/textbook/generate-book", async (req: Request, res: Response) => {
   const { topic, title, filename } = req.body;
 
@@ -146,6 +176,7 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
     statusFile,
     JSON.stringify({
       jobId,
+      topic,
       status: "pending",
       progress: "Queued...",
       currentChapter: "",
@@ -159,20 +190,15 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
   const safeFilename = filename.endsWith(".html") ? filename : `${filename}.html`;
   const logFile = path.join(jobDir, "python.log");
 
-  // Spawn book generation in background — do NOT use runPython() here because
-  // book_creation.py prints entire chapter content to stdout (megabytes), which
-  // would buffer in memory. Instead, pipe stdout/stderr to log files.
   const existingPythonPath = process.env.PYTHONPATH ?? "";
   const pythonPath = [PYTHONLIBS, existingPythonPath].filter(Boolean).join(":");
 
   const proc = spawn(
     "python3",
-    // Pass jobDir as absolute path so Python never needs to rely on os.getcwd()
     [PYTHON_SCRIPT, "generate-book", jobId, topic, title, safeFilename, jobDir],
     {
       env: { ...process.env, PYTHONPATH: pythonPath },
       cwd: API_SERVER_ROOT,
-      // Pipe all output so we can capture it without blocking
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -183,7 +209,7 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
 
   proc.on("error", (err) => {
     const errorStatus = {
-      jobId, status: "failed", progress: "", currentChapter: "",
+      jobId, topic, status: "failed", progress: "", currentChapter: "",
       totalChapters: 0, completedChapters: 0, availableFormats: [],
       error: `Failed to spawn python3: ${err.message}`,
     };
@@ -193,25 +219,26 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
 
   proc.on("close", (code) => {
     if (code !== 0) {
-      // Only write failed status if Python didn't already write completed/failed
       try {
         const current = JSON.parse(fs.readFileSync(statusFile, "utf-8"));
         if (current.status === "running" || current.status === "pending") {
           const errorStatus = {
-            jobId, status: "failed", progress: "", currentChapter: "",
+            jobId, topic, status: "failed", progress: "", currentChapter: "",
             totalChapters: 0, completedChapters: 0, availableFormats: [],
             error: `Python exited with code ${code}. Check python.log for details.`,
           };
           fs.writeFileSync(statusFile, JSON.stringify(errorStatus));
         }
       } catch {
-        // ignore read errors
+        // ignore
       }
     }
   });
 
   res.json({ jobId, message: "Book generation started" });
 });
+
+// ── Job status & log ───────────────────────────────────────────────────────────
 
 router.get("/textbook/job/:jobId/log", async (req: Request, res: Response) => {
   const { jobId } = req.params;
@@ -226,7 +253,8 @@ router.get("/textbook/job/:jobId/log", async (req: Request, res: Response) => {
 
 router.get("/textbook/job/:jobId", async (req: Request, res: Response) => {
   const { jobId } = req.params;
-  const statusFile = path.join(OUTPUT_DIR, jobId, "status.json");
+  const jobDir = path.join(OUTPUT_DIR, jobId);
+  const statusFile = path.join(jobDir, "status.json");
 
   if (!fs.existsSync(statusFile)) {
     res.status(404).json({ error: "Job not found" });
@@ -235,11 +263,21 @@ router.get("/textbook/job/:jobId", async (req: Request, res: Response) => {
 
   try {
     const data = JSON.parse(fs.readFileSync(statusFile, "utf-8"));
+
+    // Auto-save to DB the first time we see a completed job (non-blocking)
+    if (data.status === "completed" && !data.dbId) {
+      saveJobToDb(jobId, statusFile, jobDir).catch((err) => {
+        console.error("Failed to save job to DB:", err);
+      });
+    }
+
     res.json(data);
   } catch {
     res.status(500).json({ error: "Failed to read job status" });
   }
 });
+
+// ── Download from disk (active job) ───────────────────────────────────────────
 
 router.get(
   "/textbook/download/:jobId/:format",
@@ -260,7 +298,6 @@ router.get(
     }
 
     const status = JSON.parse(fs.readFileSync(statusFile, "utf-8"));
-
     const files = fs.readdirSync(jobDir);
     const matchingFile = files.find((f) => f.endsWith(`.${format}`));
 
@@ -280,12 +317,130 @@ router.get(
       ? status.title
       : path.basename(matchingFile, `.${format}`);
     res.setHeader("Content-Type", contentTypes[format]);
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${bookTitle}.${format}"`,
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${bookTitle}.${format}"`);
     res.sendFile(filePath);
   },
 );
+
+// ── Public library (approved books) ───────────────────────────────────────────
+
+router.get("/textbook/library", async (_req: Request, res: Response) => {
+  try {
+    const books = await db
+      .select({
+        id: booksTable.id,
+        title: booksTable.title,
+        topic: booksTable.topic,
+        createdAt: booksTable.createdAt,
+      })
+      .from(booksTable)
+      .where(eq(booksTable.approved, true))
+      .orderBy(booksTable.createdAt);
+
+    res.json(books);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch library" });
+  }
+});
+
+// Download from DB (library books)
+router.get("/textbook/library/:id/download/:format", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const { format } = req.params;
+
+  if (!["epub", "pdf", "html"].includes(format)) {
+    res.status(400).json({ error: "Invalid format" });
+    return;
+  }
+
+  try {
+    const [book] = await db
+      .select()
+      .from(booksTable)
+      .where(eq(booksTable.id, id));
+
+    if (!book || !book.approved) {
+      res.status(404).json({ error: "Book not found" });
+      return;
+    }
+
+    const contentTypes: Record<string, string> = {
+      epub: "application/epub+zip",
+      pdf: "application/pdf",
+      html: "text/html",
+    };
+
+    res.setHeader("Content-Type", contentTypes[format]);
+    res.setHeader("Content-Disposition", `attachment; filename="${book.title}.${format}"`);
+
+    if (format === "html") {
+      res.send(book.htmlData ?? "");
+    } else {
+      const field = format === "pdf" ? book.pdfData : book.epubData;
+      if (!field) {
+        res.status(404).json({ error: `${format} not available` });
+        return;
+      }
+      res.send(Buffer.from(field, "base64"));
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to serve file" });
+  }
+});
+
+// ── Admin endpoints ────────────────────────────────────────────────────────────
+
+// List all books (for admin panel)
+router.get("/textbook/admin/books", async (_req: Request, res: Response) => {
+  try {
+    const books = await db
+      .select({
+        id: booksTable.id,
+        jobId: booksTable.jobId,
+        title: booksTable.title,
+        topic: booksTable.topic,
+        approved: booksTable.approved,
+        createdAt: booksTable.createdAt,
+      })
+      .from(booksTable)
+      .orderBy(booksTable.createdAt);
+
+    res.json(books);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch books" });
+  }
+});
+
+// Toggle approval for a book
+router.patch("/textbook/admin/books/:id/approve", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const { approved } = req.body as { approved: boolean };
+
+  if (typeof approved !== "boolean") {
+    res.status(400).json({ error: "approved (boolean) is required" });
+    return;
+  }
+
+  try {
+    const [updated] = await db
+      .update(booksTable)
+      .set({ approved })
+      .where(eq(booksTable.id, id))
+      .returning({ id: booksTable.id, approved: booksTable.approved });
+
+    if (!updated) {
+      res.status(404).json({ error: "Book not found" });
+      return;
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update approval" });
+  }
+});
 
 export default router;

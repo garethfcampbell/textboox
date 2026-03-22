@@ -4,12 +4,19 @@ import { BookOpen, Sparkles, ArrowRight, Download, CheckCircle, Loader2 } from '
 import { useTextbookIdea, useTextbookGenerator, useTextbookJob } from '@/hooks/use-textbook';
 import { BookCover } from '@/components/BookCover';
 import { GenerationProgress } from '@/components/GenerationProgress';
+import { BookLibrary } from '@/components/BookLibrary';
+import { AdminPanel } from '@/components/AdminPanel';
 import { useToast } from '@/hooks/use-toast';
 import type { BookIdea } from '@workspace/api-client-react';
 
 type FlowStep = 'input' | 'generating-idea' | 'review' | 'generating-book' | 'done';
 
 export default function Home() {
+  const isAdmin = new URLSearchParams(window.location.search).has('admin');
+  return isAdmin ? <AdminPanel /> : <HomeContent />;
+}
+
+function HomeContent() {
   const [step, setStep] = useState<FlowStep>('input');
   const [keyword, setKeyword] = useState('');
   const [idea, setIdea] = useState<BookIdea | null>(null);
@@ -253,7 +260,13 @@ export default function Home() {
         </AnimatePresence>
       </main>
 
-      <footer className="text-center py-4">
+      {step === 'input' && (
+        <div className="relative z-10 px-6 pb-12">
+          <BookLibrary />
+        </div>
+      )}
+
+      <footer className="relative z-10 text-center py-4">
         <p className="text-xs text-muted-foreground">
           Inspired by{' '}
           <a
@@ -263,6 +276,13 @@ export default function Home() {
             className="underline underline-offset-2 hover:text-primary transition-colors"
           >
             Groqbook
+          </a>
+          {' · '}
+          <a
+            href="?admin"
+            className="underline underline-offset-2 hover:text-primary transition-colors"
+          >
+            Admin
           </a>
         </p>
       </footer>
