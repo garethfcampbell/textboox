@@ -129,7 +129,7 @@ function HomeContent() {
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="fixed top-0 left-0 h-full w-80 bg-background border-r border-border z-50 flex flex-col shadow-2xl"
           >
-            <div className="flex items-center justify-end p-4 border-b border-border">
+            <div className="flex items-center justify-end p-4 pb-8 border-b border-border">
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-primary"
@@ -138,6 +138,7 @@ function HomeContent() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Library</p>
               <BookLibrary />
             </div>
             <div className="p-5 border-t border-border">
