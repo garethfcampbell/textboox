@@ -4,10 +4,9 @@ import { motion } from 'framer-motion';
 interface BookCoverProps {
   title: string;
   topic: string;
-  author?: string;
 }
 
-export function BookCover({ title, topic, author = "Textboox AI" }: BookCoverProps) {
+export function BookCover({ title, topic }: BookCoverProps) {
   return (
     <motion.div 
       initial={{ rotateY: -20, opacity: 0, x: -50 }}
@@ -27,10 +26,6 @@ export function BookCover({ title, topic, author = "Textboox AI" }: BookCoverPro
           <p className="font-sans text-xs tracking-[0.2em] uppercase text-white/70 font-semibold">{topic}</p>
         </div>
         
-        <div className="mt-auto pt-8 border-t border-white/10">
-          <p className="font-sans text-[10px] tracking-widest uppercase text-white/50 mb-1">Published by</p>
-          <p className="font-display text-lg text-white/90">{author}</p>
-        </div>
       </div>
     </motion.div>
   );
