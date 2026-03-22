@@ -327,7 +327,7 @@ function HomeContent() {
         </AnimatePresence>
       </main>
 
-      <footer className="relative z-10 text-center py-4">
+      {step === 'input' && <footer className="relative z-10 text-center py-4">
         <p className="text-xs text-muted-foreground">
           Inspired by{' '}
           <a
@@ -346,7 +346,7 @@ function HomeContent() {
             Admin
           </a>
         </p>
-      </footer>
+      </footer>}
     </div>
   );
 }
