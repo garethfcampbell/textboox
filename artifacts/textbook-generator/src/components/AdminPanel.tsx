@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { CheckCircle, XCircle, BookOpen, Clock, Download } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { CheckCircle, XCircle, BookOpen, Clock, Download, Lock } from 'lucide-react';
 
 interface AdminBook {
   id: number;
@@ -11,32 +11,84 @@ interface AdminBook {
 }
 
 const FORMATS = ['pdf', 'epub', 'html'] as const;
+const SESSION_KEY = 'admin_password';
+
+function adminHeaders(password: string) {
+  return { 'Content-Type': 'application/json', 'x-admin-password': password };
+}
 
 export function AdminPanel() {
+  const [password, setPassword] = useState<string | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState(false);
   const [books, setBooks] = useState<AdminBook[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const fetchBooks = () => {
-    fetch('/api/textbook/admin/books')
-      .then((r) => r.json())
-      .then((data) => {
-        setBooks(Array.isArray(data) ? data : []);
+  const fetchBooks = async (pwd: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/textbook/admin/books', {
+        headers: { 'x-admin-password': pwd },
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem(SESSION_KEY);
+        setPassword(null);
+        setAuthError(true);
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+        return;
+      }
+      const data = await res.json();
+      setBooks(Array.isArray(data) ? data : []);
+    } catch {
+      setBooks([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // On mount, try saved password
   useEffect(() => {
-    fetchBooks();
+    const saved = sessionStorage.getItem(SESSION_KEY);
+    if (saved) {
+      setPassword(saved);
+      fetchBooks(saved);
+    }
   }, []);
 
+  // Focus input when login form appears
+  useEffect(() => {
+    if (password === null) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [password]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordInput.trim()) return;
+    setAuthError(false);
+    const res = await fetch('/api/textbook/admin/books', {
+      headers: { 'x-admin-password': passwordInput },
+    });
+    if (res.status === 401) {
+      setAuthError(true);
+      setPasswordInput('');
+      return;
+    }
+    sessionStorage.setItem(SESSION_KEY, passwordInput);
+    setPassword(passwordInput);
+    const data = await res.json();
+    setBooks(Array.isArray(data) ? data : []);
+  };
+
   const toggleApproval = async (book: AdminBook) => {
+    if (!password) return;
     setToggling(book.id);
     try {
       const res = await fetch(`/api/textbook/admin/books/${book.id}/approve`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(password),
         body: JSON.stringify({ approved: !book.approved }),
       });
       if (res.ok) {
@@ -49,17 +101,88 @@ export function AdminPanel() {
     }
   };
 
+  const handleLogout = () => {
+    sessionStorage.removeItem(SESSION_KEY);
+    setPassword(null);
+    setPasswordInput('');
+    setAuthError(false);
+    setBooks([]);
+  };
+
+  // ── Login screen ────────────────────────────────────────────────────────────
+  if (password === null) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-sm">
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center">
+              <Lock className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-display font-bold text-2xl text-primary">Admin Login</span>
+          </div>
+
+          <form
+            onSubmit={handleLogin}
+            className="bg-white border border-border rounded-2xl shadow-lg p-8 space-y-4"
+          >
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-primary">Password</label>
+              <input
+                ref={inputRef}
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter admin password"
+                className={`w-full px-4 py-3 rounded-xl border bg-background text-primary focus:outline-none focus:ring-2 transition-all ${
+                  authError
+                    ? 'border-red-300 focus:ring-red-200'
+                    : 'border-border focus:ring-primary/20 focus:border-primary/50'
+                }`}
+              />
+              {authError && (
+                <p className="text-xs text-red-500 font-medium">Incorrect password. Try again.</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={!passwordInput.trim()}
+              className="w-full py-3 bg-primary text-white rounded-xl font-semibold hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              Sign in
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <a href="/" className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2">
+              ← Back to homepage
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Admin panel ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background px-4 py-12">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center">
-            <BookOpen className="w-6 h-6 text-primary" />
+        <div className="flex items-center justify-between mb-10">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center">
+              <BookOpen className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="font-display text-3xl font-bold text-primary">Book Approval</h1>
+              <p className="text-muted-foreground text-sm">Approve books to display them in the public library</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-display text-3xl font-bold text-primary">Book Approval</h1>
-            <p className="text-muted-foreground text-sm">Approve books to display them in the public library</p>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
+          >
+            Sign out
+          </button>
         </div>
 
         {loading && (
@@ -126,11 +249,7 @@ export function AdminPanel() {
                           : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
                       }`}
                     >
-                      {toggling === book.id
-                        ? '…'
-                        : book.approved
-                        ? 'Unapprove'
-                        : 'Approve'}
+                      {toggling === book.id ? '…' : book.approved ? 'Unapprove' : 'Approve'}
                     </button>
                   </div>
                 </div>

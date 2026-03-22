@@ -390,10 +390,26 @@ router.get("/textbook/library/:id/download/:format", async (req: Request, res: R
   }
 });
 
+// ── Admin auth middleware ──────────────────────────────────────────────────────
+
+function requireAdminAuth(req: Request, res: Response, next: () => void) {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    next();
+    return;
+  }
+  const provided = req.headers["x-admin-password"];
+  if (provided !== adminPassword) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
 // ── Admin endpoints ────────────────────────────────────────────────────────────
 
 // List all books (for admin panel)
-router.get("/textbook/admin/books", async (_req: Request, res: Response) => {
+router.get("/textbook/admin/books", requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const books = await db
       .select({
@@ -415,7 +431,7 @@ router.get("/textbook/admin/books", async (_req: Request, res: Response) => {
 });
 
 // Toggle approval for a book
-router.patch("/textbook/admin/books/:id/approve", async (req: Request, res: Response) => {
+router.patch("/textbook/admin/books/:id/approve", requireAdminAuth, async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   const { approved } = req.body as { approved: boolean };
 
