@@ -71,7 +71,7 @@ def run_generate_book(job_id: str, topic: str, title: str, filename: str, output
         with open(status_file, 'w') as f:
             json.dump(data, f)
 
-    update_status("running", "Textbook Creation in Progress (will take about 60 seconds)", progress_percent=5)
+    update_status("running", "Textbook Creation in Progress (will take a few minutes)", progress_percent=5)
 
     try:
         from google import genai
