@@ -425,13 +425,15 @@ class BookGenerator:
                         "Title of Section 1": "Description of what to include in Chapter 1 Section 1",
                         "Title of Section 2": "Description of what to include in Chapter 1 Section 2",
                         "Title of Section 3": "Description of what to include in Chapter 1 Section 3",
-                        "Title of Section 4": "Description of what to include in Chapter 1 Section 4"
+                        "Title of Section 4": "Description of what to include in Chapter 1 Section 4",
+                        "Title of Section 5": "Description of what to include in Chapter 1 Section 5"
                     }},
                     "Title of Chapter 2": {{
                         "Title of Section 1": "Description of what to include in Chapter 2 Section 1",
                         "Title of Section 2": "Description of what to include in Chapter 2 Section 2",
                         "Title of Section 3": "Description of what to include in Chapter 2 Section 3",
-                        "Title of Section 4": "Description of what to include in Chapter 2 Section 4"
+                        "Title of Section 4": "Description of what to include in Chapter 2 Section 4",
+                        "Title of Section 5": "Description of what to include in Chapter 2 Section 5"
                     }}
                 }}
 
@@ -440,7 +442,7 @@ class BookGenerator:
 
                 {self.topic}
 
-                Include 10 chapters, each with 4 sections. The final chapter should be a concluding discussion about the key aspects covered in the book.
+                Include 10 chapters, each with 5 sections. The final chapter should be a concluding discussion about the key aspects covered in the book.
                 """,
                 config=types.GenerateContentConfig(
                     thinking_config=types.ThinkingConfig(thinking_level="high"),
@@ -862,7 +864,8 @@ CONTENT OF ALL PREVIOUS CHAPTERS:
     }}
 
     ul {{
-      padding-left: 10mm;
+      padding-left: 0;
+      list-style-position: inside;
     }}
 
     li {{
