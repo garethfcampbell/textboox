@@ -571,30 +571,15 @@ td {{
 }}
 .title-page {{
   text-align: center;
-  padding-top: 100mm;
+  padding-top: 72mm;
   page-break-after: always;
 }}
 .title-page .rule {{
   display: block;
   width: 50%;
-  margin: 0 auto;
+  margin: 0.6em auto;
   border: none;
   border-top: 1.5pt solid #1a1a1a;
-}}
-.subtitle {{
-  font-size: 12pt;
-  font-style: italic;
-  color: #555;
-  margin-top: 1em;
-}}
-.title-page .colophon {{
-  position: absolute;
-  bottom: 40mm;
-  width: 100%;
-  text-align: center;
-  font-size: 10pt;
-  letter-spacing: 0.1em;
-  color: #999;
 }}
 </style>
 </head>
@@ -603,8 +588,6 @@ td {{
   <hr class="rule">
   <h1>{title}</h1>
   <hr class="rule">
-  <p class="subtitle">{topic}</p>
-  <p class="colophon">2026</p>
 </div>
 {pdf_chapter_html}
 </body>
