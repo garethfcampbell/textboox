@@ -25,7 +25,31 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+const allowedOrigins = [
+  "https://textboox.org",
+  "https://www.textboox.org",
+];
+
+if (process.env.NODE_ENV !== "production") {
+  const devDomain = process.env.REPLIT_DOMAINS?.split(",")[0];
+  if (devDomain) allowedOrigins.push(`https://${devDomain}`);
+  allowedOrigins.push("http://localhost:3000", "http://localhost:5173");
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.some((o) => origin.startsWith(o))) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin not allowed — ${origin}`));
+      }
+    },
+    credentials: true,
+  }),
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

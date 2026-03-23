@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { db, booksTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { Resend } from "resend";
+import { ideaLimiter, generateLimiter } from "../lib/limiters";
 
 const router: IRouter = Router();
 
@@ -116,9 +117,27 @@ async function saveJobToDb(jobId: string, statusFile: string, jobDir: string): P
   }
 }
 
-// ── Debug ─────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const JOB_ID_RE = /^[a-zA-Z0-9_-]+$/;
+
+function isSafeJobId(jobId: string): boolean {
+  return JOB_ID_RE.test(jobId) && jobId.length <= 64;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email: string): boolean {
+  return EMAIL_RE.test(email) && email.length <= 254;
+}
+
+// ── Debug (development only) ───────────────────────────────────────────────────
 
 router.get("/textbook/debug", async (_req: Request, res: Response) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   const existingPythonPath = process.env.PYTHONPATH ?? "";
   const pythonPath = [PYTHONLIBS, existingPythonPath].filter(Boolean).join(":");
 
@@ -169,11 +188,16 @@ function generateJobId(): string {
 
 // ── Generate idea ─────────────────────────────────────────────────────────────
 
-router.post("/textbook/generate-idea", async (req: Request, res: Response) => {
+router.post("/textbook/generate-idea", ideaLimiter, async (req: Request, res: Response) => {
   const { keyword } = req.body;
 
-  if (!keyword) {
+  if (!keyword || typeof keyword !== "string") {
     res.status(400).json({ error: "keyword is required" });
+    return;
+  }
+
+  if (keyword.length > 200) {
+    res.status(400).json({ error: "keyword must be 200 characters or fewer" });
     return;
   }
 
@@ -299,12 +323,34 @@ function drainQueue(): void {
 
 // ── Generate book ─────────────────────────────────────────────────────────────
 
-router.post("/textbook/generate-book", async (req: Request, res: Response) => {
+router.post("/textbook/generate-book", generateLimiter, async (req: Request, res: Response) => {
   const { topic, title, filename, email } = req.body;
 
   if (!topic || !title || !filename) {
     res.status(400).json({ error: "topic, title, and filename are required" });
     return;
+  }
+
+  if (typeof topic !== "string" || topic.length > 2000) {
+    res.status(400).json({ error: "topic must be a string of 2000 characters or fewer" });
+    return;
+  }
+
+  if (typeof title !== "string" || title.length > 300) {
+    res.status(400).json({ error: "title must be a string of 300 characters or fewer" });
+    return;
+  }
+
+  if (typeof filename !== "string" || filename.length > 200) {
+    res.status(400).json({ error: "filename must be a string of 200 characters or fewer" });
+    return;
+  }
+
+  if (email !== undefined && email !== null && email !== "") {
+    if (typeof email !== "string" || !isValidEmail(email)) {
+      res.status(400).json({ error: "Invalid email address" });
+      return;
+    }
   }
 
   const jobId = generateJobId();
@@ -342,6 +388,10 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
 
 router.get("/textbook/job/:jobId/log", async (req: Request, res: Response) => {
   const { jobId } = req.params;
+  if (!isSafeJobId(jobId)) {
+    res.status(400).json({ error: "Invalid job ID" });
+    return;
+  }
   const logFile = path.join(OUTPUT_DIR, jobId, "python.log");
   if (!fs.existsSync(logFile)) {
     res.status(404).json({ error: "Log not found" });
@@ -353,6 +403,10 @@ router.get("/textbook/job/:jobId/log", async (req: Request, res: Response) => {
 
 router.get("/textbook/job/:jobId", async (req: Request, res: Response) => {
   const { jobId } = req.params;
+  if (!isSafeJobId(jobId)) {
+    res.status(400).json({ error: "Invalid job ID" });
+    return;
+  }
   const jobDir = path.join(OUTPUT_DIR, jobId);
   const statusFile = path.join(jobDir, "status.json");
 
@@ -383,6 +437,11 @@ router.get(
   "/textbook/download/:jobId/:format",
   async (req: Request, res: Response) => {
     const { jobId, format } = req.params;
+
+    if (!isSafeJobId(jobId)) {
+      res.status(400).json({ error: "Invalid job ID" });
+      return;
+    }
 
     if (!["epub", "pdf", "html"].includes(format)) {
       res.status(400).json({ error: "Invalid format" });
@@ -495,7 +554,7 @@ router.get("/textbook/library/:id/download/:format", async (req: Request, res: R
 function requireAdminAuth(req: Request, res: Response, next: () => void) {
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
-    next();
+    res.status(503).json({ error: "Admin access is not configured on this server" });
     return;
   }
   const provided = req.headers["x-admin-password"];

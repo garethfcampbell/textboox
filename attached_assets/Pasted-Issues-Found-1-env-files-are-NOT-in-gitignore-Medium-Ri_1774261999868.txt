@@ -1,0 +1,27 @@
+Issues Found
+1. .env files are NOT in .gitignore (Medium Risk)
+Neither the root .gitignore nor the artifacts/api-server/.gitignore include .env entries. If anyone accidentally creates a .env file with real credentials and runs git add ., those secrets will be committed and pushed to this public repository. This is a common and dangerous oversight — add .env, .env.*, and .env.local to .gitignore immediately.
+2. Weak Admin Authentication (High Risk)
+The admin endpoints (/api/textbook/admin/books, /api/textbook/admin/books/:id/approve) use a simple password comparison via the x-admin-password header. If ADMIN_PASSWORD is not set, the middleware calls next() and grants access to everyone with no authentication at all. This means anyone can approve/reject books if the env var isn't configured. This should at minimum require a password to always be set, and ideally use a more robust auth mechanism.
+3. Open CORS Policy (Medium Risk)
+The Express server uses app.use(cors()) with no configuration, which allows requests from any origin. For a production application, CORS should be restricted to the actual frontend domain (e.g., textboox.org).
+4. Debug Endpoint Exposed (Low-Medium Risk)
+The /api/textbook/debug endpoint exposes internal server details including file paths, Python version, directory structure, and whether key files exist. This should be disabled or protected in production.
+5. Path Traversal Potential in Download Route (Low-Medium Risk)
+The download route at /textbook/download/:jobId/:format constructs file paths using user-supplied jobId. While there's some validation on the format parameter, the jobId is taken directly from the URL. A malicious jobId like ../../etc could potentially be used to read files outside the intended output directory. The code should sanitize the jobId to ensure it only contains expected characters (alphanumeric, underscores, hyphens).
+6. No Rate Limiting (Medium Risk)
+There's no rate limiting on the /textbook/generate-idea or /textbook/generate-book endpoints. While there is a concurrency limit of 3 active jobs, an attacker could flood the queue with unlimited requests, consuming API credits (Gemini) and server resources.
+7. User Input Passed Directly to AI Prompts (Low Risk)
+The keyword and topic fields from user input are interpolated directly into AI prompts without sanitization. This creates a prompt injection risk where users could manipulate the AI's output, though the impact is limited since the output is a textbook.
+8. Email Header Injection Potential (Low Risk)
+The user-supplied email address in the book generation flow is passed directly to the Resend API. While Resend likely sanitizes this, the application doesn't validate the email format before using it.
+
+Recommendations (Priority Order)
+
+Add .env to .gitignore immediately — this is the most critical gap
+Fix admin auth — require ADMIN_PASSWORD to always be set; fail closed, not open
+Restrict CORS to your actual frontend domain
+Remove or protect the debug endpoint in production
+Sanitize jobId in download routes to prevent path traversal
+Add rate limiting to API endpoints
+Validate email addresses before passing to Resend
