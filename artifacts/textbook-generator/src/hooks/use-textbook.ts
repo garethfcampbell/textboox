@@ -16,8 +16,8 @@ export function useTextbookJob(jobId: string | null) {
       refetchInterval: (query) => {
         const data = query.state.data as any;
         const status = data?.status;
-        // Keep polling if we haven't received data yet, or if it's explicitly in progress
-        if (!data || status === 'pending' || status === 'running') {
+        // Keep polling while queued, pending, or running
+        if (!data || status === 'queued' || status === 'pending' || status === 'running') {
           return 3000;
         }
         return false;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { AlertCircle, RefreshCw, Loader2, Clock } from 'lucide-react';
 import type { JobStatus } from '@workspace/api-client-react';
 
 interface GenerationProgressProps {
@@ -15,6 +15,24 @@ export function GenerationProgress({ status, onReset }: GenerationProgressProps)
         <Loader2 className="w-10 h-10 text-accent animate-spin mb-6" />
         <h3 className="font-display text-2xl font-bold text-foreground mb-2">Connecting...</h3>
         <p className="text-muted-foreground text-center">Initializing the generation engine.</p>
+      </div>
+    );
+  }
+
+  if ((status as any).status === 'queued') {
+    return (
+      <div className="w-full max-w-xl mx-auto bg-card p-10 rounded-3xl shadow-2xl shadow-black/5 border border-border/50 flex flex-col items-center text-center">
+        <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mb-6">
+          <Clock className="w-8 h-8 text-accent" />
+        </div>
+        <h3 className="font-display text-2xl font-bold text-foreground mb-2">In Queue</h3>
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          {status.progress || "Your textbook is queued and will begin generating shortly."}
+        </p>
+        <div className="flex items-center gap-2 text-sm text-accent font-medium">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Waiting for a slot...
+        </div>
       </div>
     );
   }

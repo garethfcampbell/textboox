@@ -194,40 +194,41 @@ router.post("/textbook/generate-idea", async (req: Request, res: Response) => {
   }
 });
 
-// ── Generate book ─────────────────────────────────────────────────────────────
+// ── Job queue ─────────────────────────────────────────────────────────────────
 
-router.post("/textbook/generate-book", async (req: Request, res: Response) => {
-  const { topic, title, filename, email } = req.body;
+const MAX_CONCURRENT = 3;
+let activeJobs = 0;
 
-  if (!topic || !title || !filename) {
-    res.status(400).json({ error: "topic, title, and filename are required" });
-    return;
+interface QueuedJob {
+  jobId: string;
+  topic: string;
+  title: string;
+  safeFilename: string;
+  jobDir: string;
+  statusFile: string;
+  logFile: string;
+  email: string | null;
+}
+
+const jobQueue: QueuedJob[] = [];
+
+function writeStatus(statusFile: string, fields: object): void {
+  try {
+    fs.writeFileSync(statusFile, JSON.stringify(fields));
+  } catch {
+    // ignore
   }
+}
 
-  const jobId = generateJobId();
-  const jobDir = path.join(OUTPUT_DIR, jobId);
-  fs.mkdirSync(jobDir, { recursive: true });
+function spawnBookJob(job: QueuedJob): void {
+  const { jobId, topic, title, safeFilename, jobDir, statusFile, logFile, email } = job;
 
-  const statusFile = path.join(jobDir, "status.json");
-  fs.writeFileSync(
-    statusFile,
-    JSON.stringify({
-      jobId,
-      topic,
-      title,
-      email: email || null,
-      status: "pending",
-      progress: "Queued...",
-      currentChapter: "",
-      totalChapters: 0,
-      completedChapters: 0,
-      availableFormats: [],
-      error: "",
-    }),
-  );
-
-  const safeFilename = filename.endsWith(".html") ? filename : `${filename}.html`;
-  const logFile = path.join(jobDir, "python.log");
+  writeStatus(statusFile, {
+    jobId, topic, title, email: email || null,
+    status: "pending", progress: "Starting...",
+    currentChapter: "", totalChapters: 0, completedChapters: 0,
+    availableFormats: [], error: "",
+  });
 
   const existingPythonPath = process.env.PYTHONPATH ?? "";
   const pythonPath = [PYTHONLIBS, existingPythonPath].filter(Boolean).join(":");
@@ -247,13 +248,14 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
   proc.stderr?.pipe(logStream);
 
   proc.on("error", (err) => {
-    const errorStatus = {
-      jobId, topic, title, email: email || null, status: "failed", progress: "", currentChapter: "",
-      totalChapters: 0, completedChapters: 0, availableFormats: [],
-      error: `Failed to spawn python3: ${err.message}`,
-    };
-    fs.writeFileSync(statusFile, JSON.stringify(errorStatus));
+    writeStatus(statusFile, {
+      jobId, topic, title, email: email || null, status: "failed",
+      progress: "", currentChapter: "", totalChapters: 0, completedChapters: 0,
+      availableFormats: [], error: `Failed to spawn python3: ${err.message}`,
+    });
     fs.appendFileSync(logFile, `\nSPAWN ERROR: ${err.message}\n`);
+    activeJobs = Math.max(0, activeJobs - 1);
+    drainQueue();
   });
 
   proc.on("close", (code) => {
@@ -261,18 +263,16 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
       try {
         const current = JSON.parse(fs.readFileSync(statusFile, "utf-8"));
         if (current.status === "running" || current.status === "pending") {
-          const errorStatus = {
-            jobId, topic, title, email: email || null, status: "failed", progress: "", currentChapter: "",
-            totalChapters: 0, completedChapters: 0, availableFormats: [],
-            error: `Python exited with code ${code}. Check python.log for details.`,
-          };
-          fs.writeFileSync(statusFile, JSON.stringify(errorStatus));
+          writeStatus(statusFile, {
+            jobId, topic, title, email: email || null, status: "failed",
+            progress: "", currentChapter: "", totalChapters: 0, completedChapters: 0,
+            availableFormats: [], error: `Python exited with code ${code}. Check python.log for details.`,
+          });
         }
       } catch {
         // ignore
       }
     } else if (email) {
-      // Send completion email (non-blocking)
       try {
         const current = JSON.parse(fs.readFileSync(statusFile, "utf-8"));
         if (current.status === "completed" && current.availableFormats?.length) {
@@ -284,9 +284,58 @@ router.post("/textbook/generate-book", async (req: Request, res: Response) => {
         // ignore
       }
     }
+    activeJobs = Math.max(0, activeJobs - 1);
+    drainQueue();
   });
+}
 
-  res.json({ jobId, message: "Book generation started" });
+function drainQueue(): void {
+  while (activeJobs < MAX_CONCURRENT && jobQueue.length > 0) {
+    const next = jobQueue.shift()!;
+    activeJobs++;
+    spawnBookJob(next);
+  }
+}
+
+// ── Generate book ─────────────────────────────────────────────────────────────
+
+router.post("/textbook/generate-book", async (req: Request, res: Response) => {
+  const { topic, title, filename, email } = req.body;
+
+  if (!topic || !title || !filename) {
+    res.status(400).json({ error: "topic, title, and filename are required" });
+    return;
+  }
+
+  const jobId = generateJobId();
+  const jobDir = path.join(OUTPUT_DIR, jobId);
+  fs.mkdirSync(jobDir, { recursive: true });
+
+  const safeFilename = filename.endsWith(".html") ? filename : `${filename}.html`;
+  const statusFile = path.join(jobDir, "status.json");
+  const logFile = path.join(jobDir, "python.log");
+
+  const queuedJob: QueuedJob = {
+    jobId, topic, title, safeFilename, jobDir, statusFile, logFile,
+    email: email || null,
+  };
+
+  if (activeJobs < MAX_CONCURRENT) {
+    activeJobs++;
+    spawnBookJob(queuedJob);
+    res.json({ jobId, message: "Book generation started" });
+  } else {
+    jobQueue.push(queuedJob);
+    const position = jobQueue.length;
+    writeStatus(statusFile, {
+      jobId, topic, title, email: email || null,
+      status: "queued",
+      progress: `Waiting in queue (position ${position} of ${jobQueue.length})...`,
+      currentChapter: "", totalChapters: 0, completedChapters: 0,
+      availableFormats: [], error: "",
+    });
+    res.json({ jobId, message: `Job queued (position ${position})` });
+  }
 });
 
 // ── Job status & log ───────────────────────────────────────────────────────────
