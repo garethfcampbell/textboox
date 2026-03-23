@@ -31,9 +31,13 @@ const allowedOrigins = [
   "https://www.textboox.org",
 ];
 
+// Always include all Replit-assigned domains (covers both dev preview and production deployment)
+const replitDomains = process.env.REPLIT_DOMAINS?.split(",") ?? [];
+for (const d of replitDomains) {
+  if (d) allowedOrigins.push(`https://${d.trim()}`);
+}
+
 if (process.env.NODE_ENV !== "production") {
-  const devDomain = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (devDomain) allowedOrigins.push(`https://${devDomain}`);
   allowedOrigins.push("http://localhost:3000", "http://localhost:5173");
 }
 
