@@ -10,6 +10,7 @@ import os
 import json
 import traceback
 import html as html_lib
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -647,7 +648,41 @@ td {{
 }
 """)
 
-            WeasyHTML(string=pdf_html).write_pdf(pdf_path, stylesheets=[page_css])
+            _pdf_messages = [
+                "Rendering PDF — laying out pages…",
+                "Rendering PDF — typesetting chapters…",
+                "Rendering PDF — applying fonts and styles…",
+                "Rendering PDF — paginating content…",
+                "Rendering PDF — almost there…",
+            ]
+            _stop_event = threading.Event()
+            _pdf_error: list = []
+
+            def _pdf_worker():
+                try:
+                    WeasyHTML(string=pdf_html).write_pdf(pdf_path, stylesheets=[page_css])
+                except Exception as _e:
+                    _pdf_error.append(_e)
+                finally:
+                    _stop_event.set()
+
+            _thread = threading.Thread(target=_pdf_worker, daemon=True)
+            _thread.start()
+
+            _msg_idx = 0
+            while not _stop_event.wait(timeout=12):
+                update_status(
+                    "running",
+                    _pdf_messages[_msg_idx % len(_pdf_messages)],
+                    total_chapters=total, completed_chapters=total,
+                    available_formats=early_formats, progress_percent=97,
+                )
+                _msg_idx += 1
+
+            _thread.join()
+            if _pdf_error:
+                raise _pdf_error[0]
+
         except Exception as pdf_err:
             print(f"PDF generation failed (non-fatal): {pdf_err}")
             pdf_path = None
